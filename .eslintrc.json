@@ -47,6 +47,11 @@
       "env": { "browser": true, "es2021": true }
     },
     {
+      "files": ["header-fit.js", "boot-wild-preload.js", "sw-register.js"],
+      "env": { "browser": true, "es2021": true },
+      "globals": { "LXASpinButton": "readonly" }
+    },
+    {
       "files": ["sw.js"],
       "env": { "serviceworker": true, "browser": true, "es2021": true }
     }

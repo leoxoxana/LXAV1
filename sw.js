@@ -14,6 +14,8 @@ const ASSETS_TO_CACHE = [
   '/game-engine.js',
   '/renderer.js',
   '/spin-button.js',
+  '/header-fit.js',
+  '/boot-wild-preload.js',
   '/assets/wild-wide.webp',
   '/assets/wild-stack.webp',
   '/manifest.webmanifest',

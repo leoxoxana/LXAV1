@@ -1,0 +1,289 @@
+// Moved out of index.html so the Content-Security-Policy can drop 'unsafe-inline' for scripts (same place in the page, same order of execution).
+(function(){
+  function flushHeaderCluster(){
+    var ha=document.getElementById('headerActions');
+    var jt=document.querySelector('.jackpot-target');
+    if(!ha||!jt) return;
+    var icons=['#accountButton','.language','#scrollLock'].map(function(s){return document.querySelector(s)}).filter(Boolean);
+    if(!icons.length) return;
+    ha.style.setProperty('top','0px','important');
+    var jtTop=jt.getBoundingClientRect().top;
+    var iconsBottom=Math.max.apply(null,icons.map(function(el){return el.getBoundingClientRect().bottom}));
+    var delta=jtTop-iconsBottom;
+    // v144: user asked for ID/language to stay put - this used to also pull
+    // the cluster DOWN to cosmetically close any gap (delta>0), which is why
+    // it looked like it was "floating" even when nothing was actually about
+    // to overlap. Now it only ever nudges UP, and only the minimum needed to
+    // clear a real overlap with .jackpot-target (delta<0) - if there's
+    // already clearance, it stays exactly at its static CSS position.
+    // Explicit 0px (not removeProperty) so this never falls back to one of
+    // the many breakpoint-specific #headerActions `top` values elsewhere in
+    // layout-fix.css - those exist for unrelated layout reasons and are not
+    // guaranteed clear of .jackpot-target on their own (confirmed: at a
+    // narrow landscape width, removing the property here let the icons
+    // overlap the card by 14px even though 0px measured as clear).
+    // Header icons stay exactly where the layout puts them (top is always 0);
+    // the old nudge-up on overlap made ID/language jump on resize/rotation.
+  }
+  // V340: shrinks the header-tagline text (font-size only, never width/
+  // wrap/height) so it never overlaps #headerActions (id/flag/lock).
+  // Font-size-only keeps .header-tagline's box the exact same size on
+  // every viewport, which matters because the pre-existing V133 lock
+  // scroll-follow logic + flushHeaderCluster() above both measure header
+  // geometry — letting the tagline grow taller (via wrapping) was what
+  // fed them bad numbers last time (icons climbing onto the jackpot card,
+  // lock going invisible after floating). This never changes box height.
+  function fitHeaderTagline(){
+    var tagline=document.querySelector('.header-tagline');
+    var actions=document.getElementById('headerActions');
+    var brand=document.querySelector('.brand-cluster')||document.querySelector('.brand');
+    if(!tagline||!actions||!brand) return;
+    var rows=[].slice.call(tagline.querySelectorAll('.title-line, .top-demo'));
+    if(!rows.length) return;
+    // Reset everything to base (font-size + the row's own flex gap, which
+    // does NOT shrink with font-size and was the real reason a row could
+    // still overflow by a constant amount even at minimum font scale)
+    // before measuring, so repeated calls (resize/orientation) never
+    // compound on top of an already-shrunk state.
+    rows.forEach(function(r){
+      if(!r.dataset.baseGap){
+        r.style.removeProperty('gap');
+        r.style.removeProperty('letter-spacing');
+        r.dataset.baseGap=parseFloat(getComputedStyle(r).gap)||0;
+        r.dataset.baseLs=parseFloat(getComputedStyle(r).letterSpacing)||0;
+      }
+      r.style.setProperty('gap',r.dataset.baseGap+'px','important');
+      r.style.setProperty('letter-spacing',r.dataset.baseLs+'px','important');
+      [].slice.call(r.querySelectorAll('span,strong,small,b')).forEach(function(el){
+        if(!el.dataset.baseFs){
+          el.style.removeProperty('font-size');
+          el.dataset.baseFs=parseFloat(getComputedStyle(el).fontSize)||10;
+        }
+        el.style.setProperty('font-size',el.dataset.baseFs+'px','important');
+      });
+    });
+    actions.style.removeProperty('column-gap');
+    var brandRight=brand.getBoundingClientRect().right;
+    var actionsLeft=actions.getBoundingClientRect().left;
+    var available=actionsLeft-brandRight-20;
+    var maxNatural=Math.max.apply(null,rows.map(function(r){return r.scrollWidth}));
+    if(maxNatural<=available || maxNatural<=0) return; // already fits at base size
+    // Still doesn't fit: claw back a little room from #headerActions' own
+    // gap first (never touches the icons themselves), then scale text+gap.
+    if(available<80){
+      actions.style.setProperty('column-gap','4px','important');
+      actionsLeft=actions.getBoundingClientRect().left;
+      available=actionsLeft-brandRight-20;
+    }
+    if(available<50) available=50;
+    // Each row gets its own scale — a row with fewer/shorter words (and
+    // fewer gaps) shouldn't be shrunk as much as the row that's actually
+    // tightest, so every row individually ends up fitting `available`.
+    rows.forEach(function(r){
+      var natural=r.scrollWidth;
+      if(natural<=available) return;
+      var scale=available/natural;
+      if(scale<0.32) scale=0.32;
+      var kids=[].slice.call(r.querySelectorAll('span,strong,small,b'));
+      var apply=function(sc){
+        r.style.setProperty('gap',Math.max(1.5,r.dataset.baseGap*sc)+'px','important');
+        r.style.setProperty('letter-spacing',(r.dataset.baseLs*sc)+'px','important');
+        kids.forEach(function(el){ el.style.setProperty('font-size',(el.dataset.baseFs*sc)+'px','important'); });
+      };
+      apply(scale);
+      // Font/gap/letter-spacing don't shrink perfectly linearly with the
+      // scale factor (subpixel rounding at very small sizes), so a couple
+      // of corrective passes against the real post-scale width close the
+      // gap instead of leaving a small residual clip.
+      for(var i=0;i<3 && scale>0.32;i++){
+        var after=r.scrollWidth;
+        if(after<=available) break;
+        scale=scale*(available/after);
+        if(scale<0.32) scale=0.32;
+        apply(scale);
+      }
+    });
+  }
+  // V158 (user request): Scroll Lock + Ko-fi gif must share the SAME
+  // floating behavior - one mechanism for both, not two. Normal/parked
+  // position is the existing V276 grid (lock + kofi stacked in the same
+  // grid column, see layout-fix.css) - untouched. Once the page scrolls,
+  // both switch to position:fixed pinned to the top-right, lock above
+  // kofi, and stay there (never disappear) until scrolled back to the
+  // top. ID/account + language are intentionally NOT part of this - the
+  // old V133 mechanism (removed 2026-09-30) used to float all of them
+  // together; this time only the lock+kofi pair floats, per explicit
+  // user request. kofi's `top` is computed from the lock's OWN measured
+  // height (not hardcoded per breakpoint) so it stays correctly stacked
+  // under the lock at any screen size without duplicating numbers.
+  // iOS status bar / notch: the floating lock must park below it, not over the clock/battery. Measured on every call (never cached): at load iOS can
+  // still report 0, and a cached 0 left the floating lock on the clock row.
+  var safeProbe=null;
+  function safeTop(){
+    if(!safeProbe){
+      safeProbe=document.createElement('div');
+      safeProbe.style.cssText='position:fixed;top:0;left:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top,0px)';
+      document.body.appendChild(safeProbe);
+    }
+    return parseFloat(getComputedStyle(safeProbe).paddingTop)||0;
+  }
+  // Header: the lock + Ko-fi keep their column and never move sideways, never fade, never resize. They follow the page until they would pass the
+  // top of the screen (14px + safe area), then stay there (position:fixed in the same column, so nothing jumps).
+  // The ID and flag slide one column right, into the lock's old column, as a pure function of the flag's position (no memory of the scroll
+  // direction or speed, so the same scroll position always gives the same result):
+  //   in   when the flag's bottom has risen to SLIDE_AT x its own height below the lock's top  (0.65 = the flag still overlaps the lock's top part;
+  //        the lock is drawn above the flag)
+  //   back when it comes down again past that point + SLIDE_HYST px (hysteresis, so jitter around the point cannot flip it)
+  var SLIDE_AT=0.65, SLIDE_HYST=4, SLIDE_LATER=5;   // SLIDE_LATER: slide 5px of scroll later (less overlap with the lock)
+  var slid=false, rowShift=0, lockRestOff=0;   // lockRestOff: the lock's top minus the ID button's top while the lock sits in the grid
+  function updateLockKofiFloatInner(){
+    var bd=document.body;
+    var lock=document.getElementById('scrollLock');
+    var kofi=document.querySelector('.kofi-gif');
+    var col=document.getElementById('headerActions');
+    if(!lock||!kofi||!col) return;
+    var floating=bd.classList.contains('lock-kofi-floating');
+    var topBase=14+safeTop();
+    var colRect=col.getBoundingClientRect();
+    var idBtn=document.getElementById('accountButton');
+    var flag=document.querySelector('#headerActions .language');
+    // the ID button sits on the lock's row and never moves vertically except with the page: its top is where the lock would be in the grid
+    // The whole icon row (ID, flag, lock, Ko-fi) is aligned with the content cards: the lock's visible glyph sits 1px inside the right edge of the
+    // cards, at rest AND while floating (the row is shifted with `left`, which does not disturb the fixed lock + Ko-fi).
+    var card=document.querySelector('.hero')||document.querySelector('.machine');
+    if(card){
+      var cardRight=card.getBoundingClientRect().right;
+      var rg=document.createRange(); rg.selectNodeContents(lock);
+      var gr=rg.getBoundingClientRect(), lr0=lock.getBoundingClientRect();
+      if(gr.width>1){
+        var wantRight=(cardRight-1)+(lr0.right-gr.right);          // where the lock box's right edge must be
+        var cur=colRect.right;                                // the header row's right edge (the lock is its last item)
+        var shift=rowShift+(wantRight-cur);
+        if(Math.abs(shift-rowShift)>0.4){
+          rowShift=shift;
+          col.style.setProperty('transition','none','important');   // the container has `transition:all`; a glide would make the next measurement lag
+          col.style.setProperty('left',shift+'px','important');
+          colRect=col.getBoundingClientRect();
+        }
+      }
+    }
+    // Vertical alignment: the icon row's centre sits at 60% of the logo's height (where the rails run) on every screen and in every mode, so the rails pass
+    // through the icons exactly as they do on portrait phones (the grid places the row differently per layout: up to 20px off on landscape and in the installed app)
+    var logoImg=document.querySelector('.topbar .brand img'), topbarEl=document.querySelector('.topbar');
+    if(logoImg&&idBtn&&logoImg.offsetWidth){
+      var li0=logoImg.getBoundingClientRect(), ir0=idBtn.getBoundingClientRect();
+      // flushHeaderCluster() resets `top` to 0 on every resize pass, so the current offset is read from the element, not remembered
+      var curY=parseFloat(col.style.top)||0, sy=curY+((li0.top+li0.height*0.60)-(ir0.top+ir0.height/2));
+      if(Math.abs(sy-curY)>0.4){
+        col.style.setProperty('transition','none','important');
+        col.style.setProperty('top',sy+'px','important');
+        colRect=col.getBoundingClientRect();
+      }
+    }
+    var idRect=idBtn?idBtn.getBoundingClientRect():null;
+    var restTop=idRect?idRect.top:colRect.top;
+    // the lock pins 14px (+ safe area) from the top, but never lower than the row's own position at the top of the page (the icon row is aligned with the banner
+    // and can sit above 14px on landscape phones; pinning it lower would make it jump at the first pixel of scroll)
+    if(idRect) topBase=Math.min(topBase,idRect.top+(window.scrollY||document.documentElement.scrollTop||0));
+    var lockRect=lock.getBoundingClientRect();
+    var lockH=lockRect.height||38, lockW=lockRect.width||38, kofiW=kofi.getBoundingClientRect().width||32;
+    if(!floating&&idRect) lockRestOff=lockRect.top-idRect.top;
+    var colRight=Math.max(0,document.documentElement.clientWidth-colRect.right);
+    if(restTop<topBase){
+      lock.style.setProperty('top',topBase+'px','important');
+      kofi.style.setProperty('top',(topBase+lockH+4)+'px','important');   // 4px under the lock, as at rest
+      lock.style.setProperty('right',colRight+'px','important');
+      kofi.style.setProperty('right',(colRight+(lockW-kofiW)/2)+'px','important');
+      if(!floating) bd.classList.add('lock-kofi-floating');
+    } else if(floating){
+      bd.classList.remove('lock-kofi-floating');
+      lock.style.removeProperty('top'); kofi.style.removeProperty('top');
+      lock.style.removeProperty('right'); kofi.style.removeProperty('right');
+    }
+    // where the visible logo really is: the banner image is object-fit:cover, scaled and offset differently per layout and per mode (tab / installed app), so the
+    // centre comes from the real geometry (object-fit, object-position, the transform scale) and the logo's measured centre inside the image (51.7% x, 55.6% y)
+    if(logoImg&&topbarEl&&logoImg.offsetWidth){
+      var li=logoImg.getBoundingClientRect(), tbr=topbarEl.getBoundingClientRect(), lcs=getComputedStyle(logoImg);
+      var bw=logoImg.offsetWidth, bh=logoImg.offsetHeight||1, nw=logoImg.naturalWidth||1280, nh=logoImg.naturalHeight||80, kx=li.width/bw, ky=li.height/bh;
+      var sc=lcs.objectFit==='cover'?Math.max(bw/nw,bh/nh):lcs.objectFit==='contain'?Math.min(bw/nw,bh/nh):lcs.objectFit==='none'?1:null;
+      var opp=(lcs.objectPosition||'50% 50%').split(' ');
+      var fx=opp[0].indexOf('%')>0?parseFloat(opp[0])/100:0.5, fy=(opp[1]||'50%').indexOf('%')>0?parseFloat(opp[1])/100:0.5;
+      var gx=sc===null?bw*0.517:(bw-nw*sc)*fx+nw*sc*0.517, gy=sc===null?bh*0.556:(bh-nh*sc)*fy+nh*sc*0.556;
+      var rs=document.documentElement.style;
+      rs.setProperty('--lxa-logo-cx',(li.left+gx*kx-tbr.left).toFixed(1)+'px');
+      rs.setProperty('--lxa-logo-cy',(li.top+gy*ky-tbr.top).toFixed(1)+'px');
+      rs.setProperty('--lxa-glow-rx',Math.round(Math.min(560,Math.max(220,tbr.width*0.62)))+'px');
+      // the rails (two thin lines behind the banner) run through the icon row's centre
+      var brandEl=document.querySelector('.topbar .brand'), irr=idBtn?idBtn.getBoundingClientRect():null;
+      if(brandEl&&irr) rs.setProperty('--lxa-rail-y',((irr.top+irr.height/2)-brandEl.getBoundingClientRect().top).toFixed(1)+'px');
+      // the first card sits 6px under the logo on every screen, but never closer than 3px under the lock (a negative gap pulls it up where the layout left extra space)
+      var heroEl=document.querySelector('.hero');
+      if(heroEl&&irr){
+        var curGap=parseFloat(rs.getPropertyValue('--lxa-hero-gap'))||0;
+        var wantTop=Math.max(irr.top+lockRestOff+lockH+3,li.bottom-li.height*0.014+6);
+        var needGap=Math.round((wantTop-(heroEl.getBoundingClientRect().top-curGap))*2)/2;
+        if(Math.abs(needGap-curGap)>0.4) rs.setProperty('--lxa-hero-gap',needGap+'px');
+      }
+    }
+    // --- ID + flag slide
+    var y=window.scrollY||document.documentElement.scrollTop||0;
+    var flagRect=flag?flag.getBoundingClientRect():null;
+    var fb=flagRect?flagRect.bottom:-999, flagH=flagRect?flagRect.height:34;
+    var point=topBase+SLIDE_AT*flagH-SLIDE_LATER;
+    var want=slid;
+    if(y<=8) want=false;
+    else if(!slid&&fb<point) want=true;
+    else if(slid&&fb>point+SLIDE_HYST) want=false;
+    if(want!==slid){
+      slid=want;
+      bd.classList.toggle('lxa-slid',slid);
+      bd.classList.toggle('lxa-back',!slid);   // sliding back is quicker than sliding in
+    }
+  }
+  // A thrown error must never leave the header half aligned: it is caught, remembered (window.__lxaHeaderError) and shown in the ?debug=1 overlay
+  function updateLockKofiFloat(){
+    try{ updateLockKofiFloatInner(); }
+    catch(e){ window.__lxaHeaderError=String((e&&e.message)||e); try{ window.LXASpinButton&&LXASpinButton.trace&&LXASpinButton.trace('header error: '+window.__lxaHeaderError); }catch(_){} }
+  }
+  // Re-run on every frame for a while after anything that can still move the layout (load, rotation, resize, returning from the back/forward cache):
+  // iOS reports the final size / safe areas / fonts a little later than the event itself
+  function headerBurst(ms){
+    var end=(window.performance?performance.now():Date.now())+ms;
+    (function frame(){ updateLockKofiFloat(); if((window.performance?performance.now():Date.now())<end&&window.requestAnimationFrame) requestAnimationFrame(frame); })();
+  }
+  function onHeaderResize(){
+    flushHeaderCluster();
+    fitHeaderTagline();
+    updateLockKofiFloat();
+  }
+  window.addEventListener('load',function(){ onHeaderResize(); headerBurst(1500); });
+  window.addEventListener('pageshow',function(){ onHeaderResize(); headerBurst(800); });
+  if(window.visualViewport) window.visualViewport.addEventListener('resize',function(){ headerBurst(500); });
+  // the card edge and the header settle after load (fonts, scrollbar, layout): re-align the icon row whenever they change size
+  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(onHeaderResize);
+  setTimeout(onHeaderResize,500); setTimeout(onHeaderResize,1500);
+  if(window.ResizeObserver){ var roAlign=new ResizeObserver(function(){updateLockKofiFloat()}); roAlign.observe(document.body); var roCard=document.querySelector('.hero')||document.querySelector('.machine'); if(roCard) roAlign.observe(roCard); }
+  var t;
+  window.addEventListener('resize',function(){clearTimeout(t);t=setTimeout(function(){onHeaderResize();headerBurst(700)},120)});
+  window.addEventListener('orientationchange',function(){clearTimeout(t);t=setTimeout(function(){onHeaderResize();headerBurst(1200)},180)});
+  setTimeout(function(){
+    if(!(window.LXASpinButton&&LXASpinButton.trace)) return;
+    try{
+      var q=function(s){return document.querySelector(s)}, r=function(e){return e?e.getBoundingClientRect():{top:0,height:0,bottom:0}};
+      var im=r(q('.topbar .brand img')), id=r(q('#accountButton')), hero=r(q('.hero')), rs=document.documentElement.style;
+      LXASpinButton.trace('header '+innerWidth+'x'+innerHeight+' dpr'+(window.devicePixelRatio||1)+' standalone='+!!(matchMedia('(display-mode: standalone)').matches||navigator.standalone)+' safeTop='+safeTop()+
+        ' iconsCy='+Math.round((id.top+id.height/2)*10)/10+' target='+Math.round((im.top+im.height*0.6)*10)/10+' railY='+rs.getPropertyValue('--lxa-rail-y')+' heroGap='+rs.getPropertyValue('--lxa-hero-gap')+
+        ' gapLogoCard='+Math.round((hero.top-im.bottom)*10)/10+' err='+(window.__lxaHeaderError||'none'));
+    }catch(e){ LXASpinButton.trace('header diag failed: '+e.message); }
+    try{
+      var lg=JSON.parse(localStorage.getItem('lxa-auth-log-v1')||'[]');
+      LXASpinButton.trace('auth token='+!!localStorage.getItem('lxa-session-token-v1')+' cache='+!!localStorage.getItem('lxa-account-cache-v1')+' persisted='+window.__lxaPersisted+' seen='+/(^|; )lxa_seen=1/.test(document.cookie)+' host='+location.host+' lastRestore='+(localStorage.getItem('lxa-last-restore-v1')||'-')+' log='+(lg.length?lg.slice(0,4).map(function(e){return e.t.slice(5,16)+' '+e.why+(e.standalone?' (app)':' (tab)')}).join(' | '):'empty'));
+    }catch(e){ LXASpinButton.trace('auth diag failed: '+e.message); }
+  },2500);
+  // No rAF/timeout throttling here on purpose - updateLockKofiFloat() only
+  // reads two getBoundingClientRect() calls and writes a couple of inline
+  // styles (cheap), and rAF callbacks are not guaranteed to fire promptly
+  // in every environment (confirmed while testing this feature), so a
+  // direct call on every scroll event is actually the more reliable choice.
+  window.addEventListener('scroll',updateLockKofiFloat,{passive:true});
+})();
