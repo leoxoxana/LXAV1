@@ -110,6 +110,19 @@ async function reserveName(digest, id, now = Date.now()) {
   return Boolean(result.committed);
 }
 
+// Radio list (functions/radio.js): the last good list is kept in `meta/radio` so a cold start or a Radio Browser outage never leaves the player empty.
+async function getRadioCache() {
+  initFirebase();
+  if (!db) return null;
+  const snapshot = await db.ref('meta/radio').once('value');
+  return snapshot.val() || null;
+}
+async function saveRadioCache(data) {
+  initFirebase();
+  if (!db) throw new Error('Firebase not initialized');
+  await db.ref('meta/radio').set(data);
+}
+
 async function getLeaderboard({ strict = false } = {}) {
   try {
     initFirebase();
@@ -171,6 +184,8 @@ module.exports = {
   updateAccount,
   reserveAccountId,
   reserveName,
+  getRadioCache,
+  saveRadioCache,
   getRtpSettings,
   saveRtpSettings
 };
