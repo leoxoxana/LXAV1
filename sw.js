@@ -15,6 +15,7 @@ const ASSETS_TO_CACHE = [
   '/renderer.js',
   '/spin-button.js',
   '/header-fit.js',
+  '/radio.js',
   '/boot-wild-preload.js',
   '/assets/wild-wide.webp',
   '/assets/wild-stack.webp',

@@ -184,7 +184,8 @@ function lxaConfirm(message,opts){
 function lxaWatchVersion(){
   if(window.__lxaVersionWatch||!window.fetch) return; window.__lxaVersionWatch=true;
   var sig=function(list){ return list.map(function(u){ return String(u).replace(/^.*\//,''); }).filter(function(u){ return /\.(css|js)\?v=\d+/.test(u); }).sort().join('|'); };
-  var mine=sig(Array.prototype.map.call(document.querySelectorAll('link[href*="?v="],script[src*="?v="]'),function(e){ return e.getAttribute('href')||e.getAttribute('src'); }));
+  // the list of MY files is read when the check runs, not now: renderer.js executes while the page is still being parsed, so scripts placed after it (radio.js, header-fit.js, ...) are not in the DOM yet
+  var mineNow=function(){ return sig(Array.prototype.map.call(document.querySelectorAll('link[href*="?v="],script[src*="?v="]'),function(e){ return e.getAttribute('href')||e.getAttribute('src'); })); };
   var shown=false;
   function notice(){
     if(shown) return; shown=true;
@@ -201,7 +202,7 @@ function lxaWatchVersion(){
     fetch('/index.html?chk='+Date.now(),{cache:'no-store'}).then(function(res){ return res.ok?res.text():''; }).then(function(html){
       if(!html) return;
       var found=(html.match(/(?:href|src)="[^"]*\?v=\d+"/g)||[]).map(function(m){ return m.replace(/^(?:href|src)="|"$/g,''); });
-      if(found.length&&sig(found)!==mine) notice();
+      if(found.length&&sig(found)!==mineNow()) notice();
     }).catch(function(){});
   }
   document.addEventListener('visibilitychange',function(){ if(!document.hidden) setTimeout(check,400); });
