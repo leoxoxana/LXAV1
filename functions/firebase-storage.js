@@ -101,6 +101,15 @@ async function reserveAccountId(floor) {
   return result.snapshot.val();
 }
 
+// A name is claimed for 60 s with an atomic transaction (`meta/names/<digest>` = {id, at}) so two simultaneous `create` calls with the same name cannot both win.
+// The permanent truth stays the accounts list (checked first); an old claim (>= 60 s) is simply taken over, so a failed create never blocks a name for long.
+async function reserveName(digest, id, now = Date.now()) {
+  initFirebase();
+  if (!db) throw new Error('Firebase not initialized');
+  const result = await db.ref(`meta/names/${digest}`).transaction(current => (!current || Number(current.id) === Number(id) || now - Number(current.at || 0) >= 60000) ? { id: Number(id), at: now } : undefined);
+  return Boolean(result.committed);
+}
+
 async function getLeaderboard({ strict = false } = {}) {
   try {
     initFirebase();
@@ -161,6 +170,7 @@ module.exports = {
   saveLeaderboard,
   updateAccount,
   reserveAccountId,
+  reserveName,
   getRtpSettings,
   saveRtpSettings
 };
