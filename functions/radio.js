@@ -27,6 +27,9 @@ const CATEGORIES = [
 ];
 const NOT_MUSIC = /\bnews\b|\btalk\b|religio|cre[sș]tin|christian|gospel|\bsport|podcast|stiri|știri|biseric/i;
 
+// Moderation without a fixed station list: RADIO_HIDE=word1,word2 (Vercel env) hides every station whose name contains one of the words.
+const hiddenWords = () => String(process.env.RADIO_HIDE || '').toLowerCase().split(',').map(w => w.trim()).filter(Boolean);
+const isHidden = station => { const name = String(station.name || '').toLowerCase(); return hiddenWords().some(word => name.includes(word)); };
 const cleanName = value => String(value || '').replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 48);
 const isHttps = url => /^https:\/\/[^\s]+$/i.test(String(url || ''));
 const codecOf = station => { const c = String(station.codec || '').toUpperCase(); return c.startsWith('AAC') ? 'AAC' : c === 'MP3' ? 'MP3' : ''; };
@@ -43,10 +46,22 @@ function usable(station) {
   if (Number(station.hls) === 1) return false;
   if (Number(station.lastcheckok) !== 1) return false;
   if (Number(station.ssl_error) === 1) return false;
-  return cleanName(station.name).length >= 2;
+  return cleanName(station.name).length >= 2 && !isHidden(station);
 }
 const score = station => Math.log10(1 + (Number(station.clickcount) || 0)) * 2 + Math.log10(1 + (Number(station.votes) || 0)) + (Number(station.bitrate) >= 96 ? 1 : Number(station.bitrate) >= 64 ? .5 : 0) + (codecOf(station) === 'AAC' ? .2 : 0);
 const inCategory = (category, station) => { const text = textOf(station); return category.re.test(text) && !(category.not && category.not.test(text)) && !(NOT_MUSIC.test(station.tags || '') && !/manele|petrecere/i.test(station.tags || '')); };
+
+const tagList = station => String(station.tags || '').toLowerCase().split(',').map(tag => tag.trim()).filter(Boolean);
+// how well a station fits a category: an exact query tag 3, a matching tag 2, a matching name 1 (0 = does not belong)
+function categoryScore(category, station) {
+  if (!inCategory(category, station)) return 0;
+  let points = 0;
+  for (const tag of tagList(station)) { if (category.queries.includes(tag)) points += 3; else if (category.re.test(tag)) points += 2; }
+  if (category.re.test(station.name || '')) points += 1;
+  return points || 1;
+}
+// at most two categories per station (a station tagged house + techno + dance + chill + pop is not shown in five lists)
+const topCategories = station => CATEGORIES.map(category => ({ id: category.id, points: categoryScore(category, station) })).filter(item => item.points > 0).sort((a, b) => b.points - a.points).filter((item, index) => index === 0 || (index === 1 && item.points >= 2)).map(item => item.id);
 
 // real reachability: the stream must answer 2xx with audio bytes (not an HTML error page, not HLS)
 async function probeStream(url) {
@@ -97,7 +112,7 @@ async function buildList(deps = {}) {
   };
   const picked = new Map();   // category id -> stations (raw), best first
   for (const category of CATEGORIES) {
-    const raw = [...(await fetchRo(category)).filter(s => String(s.countrycode || 'RO').toUpperCase() === 'RO'), ...roAll].filter(s => usable(s) && inCategory(category, s));
+    const raw = [...(await fetchRo(category)).filter(s => String(s.countrycode || 'RO').toUpperCase() === 'RO'), ...roAll].filter(s => usable(s) && topCategories(s).includes(category.id));
     const unique = new Map(); for (const s of raw) { const key = s.stationuuid || streamKey(streamUrl(s)); if (!unique.has(key)) unique.set(key, s); }
     picked.set(category.id, [...unique.values()].sort((a, b) => score(b) - score(a)).slice(0, PER_CATEGORY_CANDIDATES));
   }
@@ -153,5 +168,5 @@ exports.handler = async event => {
     return reply({ error: 'Radio list temporarily unavailable.' }, 503, { 'cache-control': 'no-store' });
   }
 };
-exports.buildList = buildList; exports.getList = getList; exports.usable = usable; exports.inCategory = inCategory; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
+exports.buildList = buildList; exports.getList = getList; exports.usable = usable; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
 exports.__resetMemory = () => { memory = null; building = null; };

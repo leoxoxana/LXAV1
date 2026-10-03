@@ -132,3 +132,27 @@ describe('handler', () => {
     finally { global.fetch = original; }
   });
 });
+
+describe('best two categories + moderation', () => {
+  test('a station tagged for five genres appears in at most its best two categories', () => {
+    const many = st({ name: 'Pescobar Radio', tags: 'afro house,house,deep house,techno,dance,chill,lounge' });
+    const ids = radio.topCategories(many);
+    expect(ids.length).toBeLessThanOrEqual(2);
+    expect(ids[0]).toBe('house');   // house has the strongest tag signal (exact "house" and "deep house")
+  });
+  test('a station with one clear genre stays in exactly one category', () => {
+    expect(radio.topCategories(st({ tags: 'manele,petrecere', name: 'Radio Manele' }))).toEqual(['manele']);
+    expect(radio.topCategories(st({ tags: 'news,talk', name: 'Stiri Radio' }))).toEqual([]);
+  });
+  test('buildList really applies the limit: the multi-genre station is in at most two lists', async () => {
+    const many = st({ name: 'Everything FM', tags: 'house,techno,dance,chill,pop,rock' });
+    const data = await radio.buildList({ fetchRo: async () => [many], fetchRoAll: async () => [], fetchForeign: async () => [], probe: async () => true });
+    expect(data.cats.filter(c => c.items.some(i => i.n === 'Everything FM')).length).toBeLessThanOrEqual(2);
+  });
+  test('RADIO_HIDE hides stations by name without touching code', () => {
+    process.env.RADIO_HIDE = 'bad radio, spam';
+    try { expect(radio.usable(st({ name: 'My BAD Radio' }))).toBe(false); expect(radio.usable(st({ name: 'Good Radio' }))).toBe(true); }
+    finally { delete process.env.RADIO_HIDE; }
+    expect(radio.usable(st({ name: 'My BAD Radio' }))).toBe(true);
+  });
+});

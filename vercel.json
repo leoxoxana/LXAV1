@@ -49,5 +49,8 @@
       "path": "/api/radio?refresh=1",
       "schedule": "0 5 * * *"
     }
+  ],
+  "regions": [
+    "fra1"
   ]
 }
