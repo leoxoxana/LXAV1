@@ -189,7 +189,14 @@ function applyWild(results, level) { const wildLevel = Math.max(0, Math.min(MAX_
 const ALT_LETTERS = [...new Set(TARGET)];
 function makeGrid(results, wilds) { const grid = results.map(hits => TARGET.map((letter, column) => { if (column < hits) return letter; const options = ALT_LETTERS.filter(candidate => candidate !== letter); return options[Math.floor(Math.random() * options.length)]; })); wilds.forEach(wild => { grid[wild.line][wild.column] = '__BONUS_WILD__'; }); return grid; }
 
-exports.handler = async event => {
+// SESSION COOKIE (belt and braces for the per-device token): the token is also kept in an httpOnly cookie (JavaScript cannot read it, and a phone that clears the page's localStorage does not necessarily clear cookies).
+// The cookie is only used to restore a session when the request carries no token of its own, and only for requests from our own site (SameSite=Lax + Sec-Fetch-Site check).
+const SESSION_COOKIE = 'lxa_sid', SESSION_COOKIE_MAX_AGE = 400 * 24 * 3600;
+const readSessionCookie = headers => { const raw = String((headers && (headers.cookie || headers.Cookie)) || ''), hit = raw.split(';').map(part => part.trim()).find(part => part.startsWith(SESSION_COOKIE + '=')), value = hit ? hit.slice(SESSION_COOKIE.length + 1) : ''; return /^[0-9a-f]{20,128}$/i.test(value) ? value : ''; };
+const sameSiteRequest = headers => { const site = String((headers && headers['sec-fetch-site']) || '').toLowerCase(); return !site || site === 'same-origin' || site === 'none'; };
+const sessionCookie = token => `${SESSION_COOKIE}=${token}; Max-Age=${token ? SESSION_COOKIE_MAX_AGE : 0}; Path=/api; HttpOnly; Secure; SameSite=Lax`;
+
+const accountHandler = async event => {
   // Handle OPTIONS preflight request
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -227,12 +234,15 @@ exports.handler = async event => {
     if (action === 'login') {
       let account = null, loginToken = null;
       // TOKEN-ONLY RESTORE: a device that kept its session token but lost the cached account id (cleared cache, renamed id) can still restore: the token (192 random bits, stored only as a hash) identifies the account on its own.
-      if (input.silent === true && input.token && (input.id === undefined || input.id === null || String(input.id).trim() === '')) {
-        const accounts = await getAccounts(), entry = Object.entries(accounts || {}).find(([, acc]) => acc && tokenMatches(acc, input.token));
+      // A device that lost the token too (the phone cleared the page's localStorage) restores from the httpOnly session cookie instead (same token, set by the server at login); the token is then handed back so the page can store it again.
+      const noId = input.id === undefined || input.id === null || String(input.id).trim() === '';
+      const restoreToken = input.token || (input.silent === true && noId && sameSiteRequest(reqHeaders) ? readSessionCookie(reqHeaders) : '');
+      if (input.silent === true && restoreToken && noId) {
+        const accounts = await getAccounts(), entry = Object.entries(accounts || {}).find(([, acc]) => acc && tokenMatches(acc, restoreToken));
         if (!entry) return json({ error: 'Session expired.' }, 401);
         account = rememberKey(defaults(entry[1]), entry[0]);
         await save(account);
-        return json({ account: publicAccount(account) });
+        return json(input.token ? { account: publicAccount(account) } : { account: publicAccount(account), token: restoreToken });
       }
       if (input.id !== undefined && input.id !== null && String(input.id).trim() !== '') {
         account = await read(input.id);
@@ -526,4 +536,21 @@ exports.handler = async event => {
     }
     return json({ error: 'Unknown action.' }, 400);
   } catch (error) { console.error(error); return json({ error: 'Server temporarily unavailable.' }, 500); }
+};
+
+// Sets / renews / clears the session cookie around the handler: create, a password login and a password change hand out a new token (cookie = that token); a successful silent restore renews it
+// (this also gives devices that logged in before the cookie existed their cookie); logout and a refused silent restore clear it.
+exports.handler = async event => {
+  const res = await accountHandler(event);
+  if (!res || event.httpMethod === 'OPTIONS') return res;
+  let action = '', given = '', silent = false, answer = {};
+  try { const input = event.httpMethod === 'GET' ? (event.queryStringParameters || {}) : JSON.parse(event.body || '{}'); action = String(input.action || ''); given = String(input.token || ''); silent = input.silent === true; } catch (error) { /* not JSON: nothing to do */ }
+  try { answer = JSON.parse(res.body || '{}') || {}; } catch (error) { answer = {}; }
+  let cookie = null;
+  if (res.statusCode === 200) {
+    if (['create', 'login', 'update'].includes(action) && typeof answer.token === 'string' && answer.token) cookie = sessionCookie(answer.token);
+    else if (action === 'login' && silent && /^[0-9a-f]{20,128}$/i.test(given)) cookie = sessionCookie(given);
+    else if (action === 'logout') cookie = sessionCookie('');
+  } else if (action === 'login' && silent && res.statusCode === 401) cookie = sessionCookie('');
+  return cookie ? { ...res, headers: { ...res.headers, 'set-cookie': cookie } } : res;
 };
