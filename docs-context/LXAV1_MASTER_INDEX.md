@@ -146,7 +146,7 @@ Server action `leaderboard`, written during `spin`; Firebase `leaderboard`; stri
 ## 15. Firebase master map
 - Config: env `FIREBASE_DATABASE_URL` (default URL fallback in `firebase-storage.js`, sanitised), `FIREBASE_SERVICE_ACCOUNT` (JSON, Vercel only). Never in repo.
 - Access: server only, `firebase-admin`, `initFirebase()` (shared by all storage functions). Client has no Firebase SDK. CSP `connect-src` still allows `*.firebasedatabase.app` (unneeded; NOT VERIFIED that nothing uses it).
-- Rules: deny-all; **the file is not deployed by Vercel** — whether the live project uses these rules is NOT VERIFIED (Firebase console).
+- Rules: deny-all (`.read`/`.write` false). VERIFIED 2026-10-04: the owner pasted the live console rules and they match `database.rules.json`. The file is not deployed by Vercel; rules are changed in the Firebase console.
 - Paths (VERIFIED in `firebase-storage.js`): `accounts/<id : name>`, `leaderboard`, `rtpSettings`, `meta/lastAccountId`, `meta/names/<hash>`, `meta/radio` (cached list), `meta/radioHide`, `meta/radioMove`, `meta/radioFav` (counters), `meta/radioRejected`, `meta/radioCustoms`, `meta/radioSuggestDay`, `radioReports/<key>`, `radioSuggest/<key>`, `radioFavDev/<device>/<key>`.
 - Authoritative: accounts (balance, wild level, sessions), rtpSettings (admin odds). Derived: leaderboard (from accounts at spin time), `meta/radio` (rebuildable), `meta/radioFav` (from radioFavDev).
 - Conflict points: key rename on name change (`save()` migration), legacy `account:N` nodes, production still holds test accounts (zzprobe*, lxatest*, lxaspd*) — owner cleans.
@@ -304,5 +304,5 @@ Update this file whenever a change alters: file location, module ownership, depe
 
 ## 32. Integrity check (this pass)
 VERIFIED: every path in §C exists at `0f5a8d0` (from `git ls-files`); script order from `index.html`; actions list and env names by grep; Firebase paths by grep of `firebase-storage.js`; global names by grep; vercel/middleware/ignore contents read. No secret value read or written (only names). No runtime file modified (only `docs-context/*.md`). No Drollyv3 text used as current.
-NOT VERIFIED: ClauBack\LXAV1 contents; live Firebase rules vs `database.rules.json`; admin role check line-by-line; multi-instance rate-limit behaviour; share of CSS/JS by subsystem (author estimates); the "12 reassigned functions" claim; test suite result at this commit (not re-run); live deploy state; real iPhone/Android behaviour.
+NOT VERIFIED: ClauBack\LXAV1 contents; admin role check line-by-line; multi-instance rate-limit behaviour; share of CSS/JS by subsystem (author estimates); the "12 reassigned functions" claim; test suite result at this commit (not re-run); live deploy state; real iPhone/Android behaviour.
 Not found / absent: `bot-player.js`, `netlify.toml`, Firebase client SDK, Firestore.
