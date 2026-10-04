@@ -439,6 +439,7 @@ async function handleFav(body, storage) {
 // Duplicates are decided here, on the canonical address (http/https, www., port 80/443, trailing slash, Shoutcast "/;", tracking parameters are the same stream), inside one Firebase transaction.
 let validator = validate.validateStream, accountVerifier = null;
 exports.__setValidator = fn => { validator = fn || validate.validateStream; };
+exports.__servingCustoms = async () => { servingCache = null; return (await servingState(require('./firebase-storage'))).customs; };
 exports.runValidator = (url, opts) => validator(url, opts);   // the one validation entry point (admin recommendation checks use it too)
 exports.__setAccountVerifier = fn => { accountVerifier = fn || null; };
 const blockedWhy = raw => { try { const u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : 'https://' + raw); return u.protocol === 'http:' || u.protocol === 'https:' ? 'blocked' : 'bad-url'; } catch (error) { return 'bad-url'; } };
@@ -459,6 +460,8 @@ async function handleSubmit(body, event, storage) {
   const name = String(body.n || '').replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 40), now = Date.now();
   const input = custom.cleanStreamUrl(raw);
   if (!input) return reply({ ok: false, status: 'INVALID', why: blockedWhy(raw) }, 200, { 'cache-control': 'no-store' });
+  const browseTools = require('./radio-browse'), fRaw = String(body.f === undefined || body.f === null ? '' : body.f).trim(), freq = fRaw ? browseTools.parseFreq(fRaw) : null, countryCode = browseTools.cleanCc(body.cc);   // optional metadata: a frequency must be a finite number, anything else is refused
+  if (fRaw && freq === null) return reply({ ok: false, status: 'INVALID', why: 'bad-frequency' }, 200, { 'cache-control': 'no-store' });
   const device = reports.deviceKey(dev), who = String(headers['x-vercel-forwarded-for'] || headers['x-forwarded-for'] || headers['X-Forwarded-For'] || 'anon').split(',')[0].trim();
   if (!reports.allow('sub' + device, now, 8) || !reports.allow('val' + who, now, 15)) return reply({ ok: false, status: 'INVALID', why: 'limit' }, 429, { 'cache-control': 'no-store' });
   try {
@@ -476,7 +479,7 @@ async function handleSubmit(body, event, storage) {
     if (rejected[keyIn] || rejected[keyOut]) return reply(playerView(verdict, { queued: false, dup: 'rejected' }), 200, { 'cache-control': 'no-store' });
     if (!(await storage.bumpSuggestDay(new Date(now).toISOString().slice(0, 10), 200))) return reply(playerView(verdict, { queued: false, dup: 'new', note: 'day-limit' }), 200, { 'cache-control': 'no-store' });
     let existed = false;
-    await storage.updateRadioSuggest(keyOut, current => { existed = Boolean(current && current.u); return validate.applySubmission(current, { u: verdict.ok ? verdict.url : input, orig: raw, canon: canonOut, n: name || verdict.name, device, by, verdict, reused }, now); });
+    await storage.updateRadioSuggest(keyOut, current => { existed = Boolean(current && current.u); return validate.applySubmission(current, { u: verdict.ok ? verdict.url : input, orig: raw, canon: canonOut, n: name || verdict.name, device, by, verdict, f: freq, cc: countryCode, reused }, now); });
     return reply(playerView(verdict, { queued: true, dup: existed ? 'pending' : 'new' }), 200, { 'cache-control': 'no-store' });
   } catch (error) { return reply({ error: 'Not saved.' }, 503, { 'cache-control': 'no-store' }); }
 }

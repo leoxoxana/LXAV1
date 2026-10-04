@@ -719,6 +719,24 @@ describe('player RECOMMENDS a station found by frequency → admin → public (o
     const r = await b.search('', '97.5', [{ n: 'Mine', u: 'https://m.example.com/x', f: 97.5, fs: 'ADMIN_VERIFIED', cc: 'DE', c: 'MP3', b: 64 }]); expect(r.items[0]).toMatchObject({ n: 'Mine', f: 97.5, fs: 'ADMIN_VERIFIED' });
     expect((await b.search('FR', '97.5', [{ n: 'Mine', u: 'https://m.example.com/x', f: 97.5, cc: 'DE' }])).items).toHaveLength(0);
   });
+  test('player link submit: optional country + frequency are normalised (comma, spaces) and stored as USER_PROVIDED; invalid values are refused; absent = no frequency and still playable', async () => {
+    const sub = (body, ip) => radio.handler({ httpMethod: 'POST', headers: { 'x-forwarded-for': ip }, body: JSON.stringify({ action: 'submit', u: 'https://own.example.com/live', n: 'Own', dev: 'ownsubmitdevice01', ...body }) }).then(r => JSON.parse(r.body));
+    for (const [i, bad] of [[1, 'abc'], [2, 'NaN'], [3, 'Infinity'], [4, '97.5 MHz'], [5, '-3']]) expect(await sub({ f: bad }, '6.6.6.' + i)).toMatchObject({ ok: false, why: 'bad-frequency' });
+    expect(Object.keys(storage.__suggest())).toHaveLength(0);
+    const ok = await sub({ f: ' 97,5 ', cc: 'de' }, '6.6.6.9'); expect(ok).toMatchObject({ ok: true, status: 'VALID', queued: true });
+    const node = Object.values(storage.__suggest())[0]; expect(node).toMatchObject({ f: 97.5, fs: 'USER_PROVIDED', cc: 'DE' }); expect(typeof node.f).toBe('number');
+    await sub({ f: '101.1', cc: 'FR', dev: 'ownsubmitdevice02' }, '6.6.6.10'); expect(Object.values(storage.__suggest())[0]).toMatchObject({ f: 97.5, cc: 'DE', count: 2 });   // a later player never changes it
+    const none = await sub({ u: 'https://other.example.com/live', dev: 'ownsubmitdevice03' }, '6.6.6.11'); expect(none).toMatchObject({ ok: true, status: 'VALID' }); const other = Object.values(storage.__suggest()).find(x => /other/.test(x.u)); expect(other.f).toBeUndefined();
+  });
+  test('admin approves a player submission: the player frequency stays USER_PROVIDED, the owner frequency becomes ADMIN_VERIFIED, both are found by frequency search', async () => {
+    const sub = (u, f) => radio.handler({ httpMethod: 'POST', headers: { 'x-forwarded-for': '7.7.7.7' }, body: JSON.stringify({ action: 'submit', u, n: 'S', dev: 'ownsubmitdevice09', f }) });
+    await sub('https://u1.example.com/live', '88.8'); await sub('https://u2.example.com/live', '99.9');
+    const rows = (await call({ op: 'suggestions' })).body.suggestions; const k1 = rows.find(r => /u1/.test(r.u)), k2 = rows.find(r => /u2/.test(r.u)); expect(k1).toMatchObject({ f: 88.8, fs: 'USER_PROVIDED' });
+    await call({ op: 'sug-approve', key: k1.key, cat: 'pop', name: 'One' }); await call({ op: 'sug-approve', key: k2.key, cat: 'pop', name: 'Two', f: '100,3' });
+    const cs = Object.values(storage.__customs()); expect(cs.find(c => c.n === 'One')).toMatchObject({ f: 88.8, fs: 'USER_PROVIDED' }); expect(cs.find(c => c.n === 'Two')).toMatchObject({ f: 100.3, fs: 'ADMIN_VERIFIED' });
+    const b = require('./functions/radio-browse.js').create({ rb: async () => [], usable: () => true, toItem: s => s, canonical: x => x }), served = (await radio.__servingCustoms());
+    expect((await b.search('', '88.8', served)).items[0]).toMatchObject({ n: 'One', fs: 'USER_PROVIDED' }); expect((await b.search('', '100.3', served)).items[0]).toMatchObject({ n: 'Two', fs: 'ADMIN_VERIFIED' });
+  });
   test('REPORT is untouched and separate: a report never creates a recommendation', async () => {
     const before = Object.keys(storage.__recommend()).length; const res = await radio.handler({ httpMethod: 'POST', headers: { 'x-forwarded-for': '5.5.5.5' }, body: JSON.stringify({ action: 'report', u: 'https://nowhere.example.com/x', kind: 'dead', dev: 'reportdevice00001' }) });
     expect([400, 404]).toContain(res.statusCode); expect(Object.keys(storage.__recommend()).length).toBe(before);

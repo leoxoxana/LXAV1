@@ -34,7 +34,7 @@ function create({ rb, usable, toItem, canonical, now = Date.now }) {
   }
   const dedupe = rows => { const seen = new Set(), out = []; for (const row of rows) { const key = canonical(row.it.u) || row.it.u; if (seen.has(key)) continue; seen.add(key); out.push(row); } return out; };
   const itemOf = (s, f) => { const item = { ...toItem(s), f, fs: 'EXTERNAL_SOURCE', st: String(s.state || '').slice(0, 40) }; remember(s, item, f); return item; };
-  const customRows = (customs, f, cc) => (customs || []).filter(c => c && c.u && Number(c.f) > 0 && (f === undefined || Number(c.f) === f) && (!cc || String(c.cc || '').toUpperCase() === cc)).map(c => ({ it: { n: c.n, u: c.u, c: c.c || '', b: c.b || 0, cc: String(c.cc || '').toUpperCase(), f: Number(c.f), fs: c.fs === 'ADMIN_VERIFIED' ? 'ADMIN_VERIFIED' : 'EXTERNAL_SOURCE', st: '' }, clicks: 1e9 }));   // stations the owner approved with a frequency come FIRST (and win a duplicate)
+  const customRows = (customs, f, cc) => (customs || []).filter(c => c && c.u && Number(c.f) > 0 && (f === undefined || Number(c.f) === f) && (!cc || String(c.cc || '').toUpperCase() === cc)).map(c => ({ it: { n: c.n, u: c.u, c: c.c || '', b: c.b || 0, cc: String(c.cc || '').toUpperCase(), f: Number(c.f), fs: ['ADMIN_VERIFIED', 'USER_PROVIDED'].includes(c.fs) ? c.fs : 'EXTERNAL_SOURCE', st: '' }, clicks: 1e9 }));   // stations the owner approved with a frequency come FIRST (and win a duplicate)
   // exact frequency: all real stations of the country (or of the whole directory when cc is empty) that write exactly this frequency
   async function search(cc, freq, customs) {
     const f = parseFreq(freq); if (f === null) return { error: 'bad-frequency' };

@@ -8,7 +8,7 @@
   var playBtn = $('radioPlay'), prevBtn = $('radioPrev'), nextBtn = $('radioNext'), titleBtn = $('radioTitle'), nameEl = $('radioName'), statusEl = $('radioStatus'), volEl = $('radioVol'), toggleBtn = $('radioToggle'),
       panel = $('radioPanel'), catsEl = $('radioCats'), searchEl = $('radioSearch'), diceBtn = $('radioDice'), favBtn = $('radioFav'), recentBtn = $('radioRecent'), listEl = $('radioList'),
       sleepEl = $('radioSleep'), ecoEl = $('radioEco'), ecoLabel = $('radioEcoLabel'), msgEl = $('radioMsg'),
-      addBtn = $('radioAddBtn'), addBox = $('radioAdd'), addUrl = $('radioAddUrl'), addName = $('radioAddName'), addGo = $('radioAddGo'), addClose = $('radioAddClose'), addMsg = $('radioAddMsg');
+      addBtn = $('radioAddBtn'), addBox = $('radioAdd'), addUrl = $('radioAddUrl'), addName = $('radioAddName'), addGo = $('radioAddGo'), addClose = $('radioAddClose'), addMsg = $('radioAddMsg'), addCc = $('radioAddCc'), addF = $('radioAddF');
   var findItems = [];
   var KEY = 'lxa-radio-v1', LIST_KEY = 'lxa-radio-list-v3', BAD_KEY = 'lxa-radio-bad-v1', FAV_KEY = 'lxa-radio-fav-v1', RECENT_KEY = 'lxa-radio-recent-v1';
   var LIST_TTL = 30 * 60 * 1000, BAD_TTL = 24 * 3600 * 1000, ECO_KBPS = 96, MAX_FAV = 60, MAX_RECENT = 5;
@@ -26,6 +26,7 @@
           add: 'Add your own station', addGo: 'Add and play', addUrl: 'Link (https://…, .pls, .m3u)', addNamePh: 'Name (optional)', close: 'Close', removeMine: 'Remove from my list',
           mAdded: 'Added', mQueued: 'Stream valid — you can listen now. It is published only after approval.', mKnown: 'This station is already in the list.', mRejected: 'Valid stream — but it will not be published.', mNoQueue: 'Valid — but not sent to the owner any more today.', mHtml: 'That is a web page, not a stream.', mNoData: 'The server sends no data.', mDisc: 'The stream disconnects right away.', mUnstable: 'The stream is too unstable.', mTimeout: 'Connection timed out.', mWarn: 'Note: dropouts during the test', mBad: 'That is not a valid link.', mBlocked: 'This link is not allowed.', mUnreachable: 'Not reachable or not a radio stream.', mHttpOnly: 'http only: the browser blocks it on this site.', mNotAudio: 'No audio stream found there.', mLimit: 'Too many tries – later.', mFull: 'At most 10 own stations.', mNoIos: 'This format (Ogg / FLAC) does not play on iPhone.', mOffline: 'No connection.' }
   };
+  TEXT.de.mBadF = 'Ungültige Frequenz (nur eine Zahl, z. B. 97.5).'; TEXT.ro.mBadF = 'Frecvență invalidă (doar un număr, ex. 97.5).'; TEXT.en.mBadF = 'Invalid frequency (a number only, e.g. 97.5).';
   var L = function () { var l = typeof lang === 'string' ? lang : ''; if (!TEXT[l]) { try { l = localStorage.getItem('lxaLang') || ''; } catch (e) { l = ''; } } return TEXT[l] || TEXT.de; };
   var store = {
     get: function (k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v === null || v === undefined ? d : v; } catch (e) { return d; } },
@@ -301,7 +302,7 @@
   // It plays at once and stays on this device. The SERVER also validates it and saves it for the owner of the site automatically (admin > RADIO); it becomes public only when the owner approves it.
   var say = function (key, extra) { addMsg.textContent = key ? (extra || '') + L()[key] : ''; };
   var hostOf = function (u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
-  var WHY = { 'bad-url': ['mBad', '⚠️ '], blocked: ['mBlocked', '⛔ '], unreachable: ['mUnreachable', '❌ '], 'http-only': ['mHttpOnly', '🔓 '], 'not-audio': ['mNotAudio', '🎧 '], html: ['mHtml', '🌐 '], 'no-data': ['mNoData', '🔇 '], disconnects: ['mDisc', '✂️ '], unstable: ['mUnstable', '〰️ '], timeout: ['mTimeout', '⏱️ '], limit: ['mLimit', '⏳ '] };
+  var WHY = { 'bad-frequency': ['mBadF', '⚠️ '], 'bad-url': ['mBad', '⚠️ '], blocked: ['mBlocked', '⛔ '], unreachable: ['mUnreachable', '❌ '], 'http-only': ['mHttpOnly', '🔓 '], 'not-audio': ['mNotAudio', '🎧 '], html: ['mHtml', '🌐 '], 'no-data': ['mNoData', '🔇 '], disconnects: ['mDisc', '✂️ '], unstable: ['mUnstable', '〰️ '], timeout: ['mTimeout', '⏱️ '], limit: ['mLimit', '⏳ '] };
   function openAdd(open, url) {
     addBox.hidden = !open; addBtn.setAttribute('aria-expanded', open ? 'true' : 'false'); addBtn.classList.toggle('on', open);
     if (open) { if (panel.hidden) openPanel(true); if (typeof url === 'string') addUrl.value = url; say(''); try { addUrl.focus(); } catch (e) { /* ignore */ } }
@@ -320,7 +321,7 @@
     say('', ''); addMsg.textContent = '⏳'; addGo.disabled = true; unlockAudio();
     // POST submit: the server validates the stream (authoritative), saves the submission for the owner by itself and answers whether it can be played now. The login (if any) only tells the owner WHO sent it.
     var who = {}; try { if (typeof lxaAccount !== 'undefined' && lxaAccount && typeof lxaToken !== 'undefined' && lxaToken) who = { id: lxaAccount.id, token: lxaToken }; } catch (e) { who = {}; }
-    fetch('/api/radio', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'submit', u: raw, n: typed, dev: deviceId(), id: who.id, token: who.token }) }).then(function (r) { return r.json().catch(function () { return null; }); }).catch(function () { return null; }).then(function (res) {
+    fetch('/api/radio', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'submit', u: raw, n: typed, dev: deviceId(), id: who.id, token: who.token, cc: addCc ? addCc.value.trim() : '', f: addF ? addF.value.trim() : '' }) }).then(function (r) { return r.json().catch(function () { return null; }); }).catch(function () { return null; }).then(function (res) {
       addGo.disabled = false;
       var failed = function (key, mark) { relock(); say(key, mark); };
       var local = false;
@@ -333,7 +334,7 @@
       saveMine(item);
       var note = res.dup === 'public' || res.dup === 'approved' ? 'mKnown' : res.dup === 'rejected' ? 'mRejected' : res.queued ? 'mQueued' : local ? 'mAdded' : 'mNoQueue';
       say(note, '✅ '); if (res.queued && res.warnings && res.warnings.length && res.stable === false) addMsg.textContent += ' · ' + L().mWarn;
-      addUrl.value = ''; addName.value = '';
+      addUrl.value = ''; addName.value = ''; if (addF) addF.value = '';
       unlocking = false;   // the element stays unlocked: the real stream starts on it now
       view = 'fav'; searchEl.value = ''; renderCats(); renderList(); persist(); play('fav', 0, false);
     });

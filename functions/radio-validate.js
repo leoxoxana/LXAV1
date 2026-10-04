@@ -203,6 +203,8 @@ function applySubmission(current, sub, now) {
   const accounts = Array.isArray(node.accounts) ? node.accounts.slice() : [];
   if (sub.by && sub.by.id !== undefined && !accounts.some(a => a && String(a.id) === String(sub.by.id))) accounts.push({ id: sub.by.id, name: String(sub.by.name || '').slice(0, 30) });
   node.accounts = accounts.slice(0, MAX_ACCOUNTS); if (!node.by && node.accounts.length) node.by = node.accounts[0];
+  if (Number(sub.f) > 0 && !node.f) { node.f = Number(sub.f); node.fs = 'USER_PROVIDED'; }   // optional metadata from the first player who gave it; it never changes by itself afterwards
+  if (/^[A-Z]{2}$/.test(String(sub.cc || '')) && !node.cc) node.cc = sub.cc;
   // a later player (or a different spelling of the same address) NEVER turns a good row into a bad one, and a reused verdict is not re-stamped as a new check: only a real check (TEST AGAIN, a first submission, a retry of an INVALID row) writes the verdict
   const ok = Boolean(sub.verdict && sub.verdict.ok);
   if (sub.reused || (node.status === 'VALID' && !ok)) return node;

@@ -73,7 +73,7 @@
   function detailsHtml(s) {
     var v = s.v || {}, rows = [], add = function (label, val) { if (val !== undefined && val !== null && val !== '') rows.push('<div><span>' + esc(label) + '</span><b>' + esc(val) + '</b></div>'); };
     add(L().dWho, s.by ? '#' + s.by.id + (s.by.name ? ' · ' + s.by.name : '') + (s.accounts && s.accounts.length > 1 ? ' (+' + (s.accounts.length - 1) + ')' : '') : L().dAnon);
-    add(L().dOrig, s.orig); add(L().dNorm, s.u); add(L().dCanon, s.canon); add(L().dSent, fmt(s.first)); add(L().dChecked, fmt(s.checkedAt)); add(L().dPlayers, s.count);
+    add(L().recFreq, s.f ? s.f + ' MHz (' + (s.fs || 'USER_PROVIDED') + ')' : ''); add(L().recCountry, s.cc); add(L().dOrig, s.orig); add(L().dNorm, s.u); add(L().dCanon, s.canon); add(L().dSent, fmt(s.first)); add(L().dChecked, fmt(s.checkedAt)); add(L().dPlayers, s.count);
     add(L().dAudio, v.ok === true ? L().yes : v.ok === false ? L().no : '?'); add(L().dCodec, [v.codec, v.vbr ? 'VBR' : ''].filter(Boolean).join(' ')); add(L().dBitrate, v.bitrate ? v.bitrate + ' kbps' : ''); add(L().dRate, v.sampleRate ? v.sampleRate + ' Hz' : ''); add(L().dChan, v.channels);
     add(L().dStable, v.stable === true ? L().yes : v.stable === false ? L().no : (v.hls ? 'HLS' : '')); add(L().dMeasured, v.measuredKbps ? v.measuredKbps + ' kbps' : ''); add(L().dStalls, v.stalls !== undefined ? v.stalls + (v.maxGapMs ? ' (max ' + v.maxGapMs + ' ms)' : '') : ''); add(L().dTtfb, v.ttfbMs ? v.ttfbMs + ' ms' : '');
     add(L().dLevel, L().notMeasured); add(L().dDup, dupLabel(s.dup)); if (v.warnings && v.warnings.length) add(L().dWarn, v.warnings.join(', ')); if (v.ok === false) add(L().dWhy, whyLabel(v.why));
@@ -114,7 +114,8 @@
     testAudio.src = url; var p = testAudio.play(); if (p && p.catch) p.catch(function () { if (testBtn === button) { button.textContent = '❌'; testAudio = null; testBtn = null; } });
   }
   function sugChipsHtml(key) {
-    return targets.map(function (id) { var c = cat(id); return '<button type="button" class="radio-chip" data-sug-cat="' + esc(id) + '" data-key="' + esc(key) + '" title="' + esc(c ? c.label : id.toUpperCase()) + '" aria-label="' + esc(L().sugApprove + ': ' + (c ? c.label : id.toUpperCase())) + '">' + esc(targetEmoji(id)) + '</button>'; }).join('');
+    var cur = (sugRows || []).filter(function (x) { return x.key === key; })[0], pre = cur && cur.f ? cur.f : '';
+    return '<input type="text" class="radio-rec-f" inputmode="decimal" maxlength="7" value="' + esc(pre) + '" placeholder="MHz" aria-label="' + esc(L().recFreq) + '"> ' + targets.map(function (id) { var c = cat(id); return '<button type="button" class="radio-chip" data-sug-cat="' + esc(id) + '" data-key="' + esc(key) + '" title="' + esc(c ? c.label : id.toUpperCase()) + '" aria-label="' + esc(L().sugApprove + ': ' + (c ? c.label : id.toUpperCase())) + '">' + esc(targetEmoji(id)) + '</button>'; }).join('');
   }
   // ---- ⭐ RECOMMENDATIONS: what players recommended from the frequency search. One row per STATION (several players share it). The data is the server's own record, never the client's.
   function loadRecs() { return request('recs').then(function (r) { recRows = r.recs || []; targets = r.targets || targets; recCount = recRows.filter(function (x) { return x.status === 'PENDING'; }).length; }); }
@@ -201,7 +202,7 @@
       var sugCat = t.closest('[data-sug-cat]');
       if (sugCat) {
         var rowEl = sugCat.closest('.player-row'), nameEl = rowEl && rowEl.querySelector('.radio-sug-name'), hasQuery = !!(rowEl && rowEl.querySelector('[data-q="1"]'));
-        var go = function () { sugCat.disabled = true; request('sug-approve', { key: sugCat.dataset.key, cat: sugCat.dataset.sugCat, name: nameEl ? nameEl.value : '' }).then(function () { return reload(); }).catch(function (err) { sugCat.disabled = false; failure(err); }); };
+        var go = function () { sugCat.disabled = true; request('sug-approve', { key: sugCat.dataset.key, cat: sugCat.dataset.sugCat, name: nameEl ? nameEl.value : '', f: rowEl && rowEl.querySelector('.radio-rec-f') ? rowEl.querySelector('.radio-rec-f').value : '' }).then(function () { return reload(); }).catch(function (err) { sugCat.disabled = false; failure(err); }); };
         if (hasQuery && typeof lxaConfirm === 'function') lxaConfirm(L().sugTokenWarn).then(function (yes) { if (yes) go(); }); else go();
         return;
       }
