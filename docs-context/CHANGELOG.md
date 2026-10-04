@@ -8,6 +8,7 @@ Rewritten from scratch 2026-10-03 (65 commits at that time; the hash is the auth
 - Lock + zoom: updateLockState no longer rewrites the viewport meta; the lock lets the fingers pan / pinch out while visualViewport.scale > 1 (html.lxa-zoomed), pins again at 1. Admin radio: emoji-only buttons, 📂 + 10 emoji chips, Stations tab with every station, outdated-list wake-up, specific errors. Rank line filled directly while spinning. Hover effects only for real pointers.
 - Radio Browser (the public station directory) was down during testing (503 / DNS): tests seed the dev server's cache from the live list (scratchpad seed_cache.js). Server code unchanged by that.
 - Follow-up (commit 9dbd750): the screenshot also showed the page zoomed OUT (site at ~85 % of the screen, lock and Ko-fi floating in the dark strip outside it): meta viewport now has minimum-scale=1 (pinch-in allowed). Real iPhone not testable here.
+- Follow-up (commit 1a3e30e): admin > RADIO report rows: the trash button is now a checkmark = resolved (checked, the station works), acts at once; the confirm dialog was UNDER the admin panel (z 3000 vs 5000), now above (6000) with a light backdrop. renderer v=427, layout-fix v=496.
 - Tests: jest 206, eslint 0 errors, e2e_lockzoom 14 (new), audit_overflow (new), e2e_radio4 15, radio5 19, rank 5, zoom audit 66/66, all older suites. NOT deployed.
 
 ## 2026-10-04 - Zoom fix + radio 12 categories + admin station manager (commits 054be5e, 07692da; radio.js v=10, admin-radio.js v=1, renderer v=424, layout-fix v=493, header-fit v=2)
