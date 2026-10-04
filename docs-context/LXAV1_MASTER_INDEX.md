@@ -197,9 +197,9 @@ Server action `leaderboard`, written during `spin`; Firebase `leaderboard`; stri
 | Circular dependencies | none found among server files (`lxa-account` requires radio lazily); client has no module graph |
 
 ## 20. Duplication / conflict map
-- **CONFLICT / NEEDS RESOLUTION** — service-worker cache name: `docs-context/MEMORY.md` says `lxa-v2-cache`; `sw.js` says `lxa-v3-cache`. Code wins (priority 1). Doc stale.
-- **CONFLICT** — `docs-context/ARCHITECTURE.md` §1 says index.html has "inline scripts" and "7 test files"; code now has no inline scripts (CSP `script-src 'self'`) and 20 test files; also does not list radio, header-fit.js, boot-wild-preload, sw-register. Doc stale (rewritten for commit `c82da19`).
-- **CONFLICT** — `docs-context/CONTEXT.md` asset versions (layout-fix 434, renderer 403) vs `index.html` (layout-fix 497, renderer 428). Code wins.
+- RESOLVED 2026-10-04 — SW cache name: `sw.js` = `lxa-v3-cache`; the repo copy of MEMORY.md no longer states a different name (re-check the ClauBack copy).
+- RESOLVED 2026-10-04 — ARCHITECTURE.md §1 corrected (no inline scripts, 20 test files, radio files named).
+- RESOLVED 2026-10-04 — CONTEXT.md no longer copies `?v=` numbers; `index.html` is the only source.
 - Duplicate logic: WILD placement/payout (client engine vs server copy); account name/ID helpers; `lang` fallback logic in radio.js vs renderer.
 - Multiple definitions: `renderer.js` re-assigns base functions later in the file ("12 reassignments" per the other session; NOT VERIFIED by me); old CSS rules overridden by later blocks (279 version comments).
 - Legacy still present: `responsive-compact.css` (still linked), `scripts/build.js` (unused), `middleware.js` BLOCKED list and comment mention `bot-player.js` (file absent); `api/lxa-account.js` and `middleware.js` comments mention Netlify.
@@ -212,7 +212,7 @@ Server action `leaderboard`, written during `spin`; Firebase `leaderboard`; stri
 | Admin odds/RTP/costs | Firebase `rtpSettings` (server `applyRtpSettings`) | code defaults in `game-engine.js` (production `settings:{}` = defaults) | admin via admin actions |
 | Max stake | `maxBetForWildLevel` in `game-engine.js` (client+server share the file) | none | code only |
 | Language | localStorage `lxaLang`, default `de` | — | player |
-| Radio hide list | Firebase `meta/radioHide` + env `RADIO_HIDE` | — | admin / owner. **OWNERSHIP = UNCLEAR** which wins when both set (NOT VERIFIED) |
+| Radio hide list | Firebase `meta/radioHide` + env `RADIO_HIDE` | — | admin / owner. NOT a conflict (VERIFIED in code): two additive filters. `RADIO_HIDE` = env words matched against the station NAME while building the list (`radio.js` `isHidden`); `meta/radioHide` = per-station keys hidden by the admin, applied when serving (`radio.js` `shown`). Hidden if EITHER matches; an env change needs a redeploy + list rebuild |
 | Radio category order | code (`CATEGORIES`, popularity) + `meta/radioMove` | — | admin |
 | CSP/headers, cron | `vercel.json` | — | owner (deploy) |
 | DB secrets | Vercel env | — | owner |
@@ -304,5 +304,5 @@ Update this file whenever a change alters: file location, module ownership, depe
 
 ## 32. Integrity check (this pass)
 VERIFIED: every path in §C exists at `0f5a8d0` (from `git ls-files`); script order from `index.html`; actions list and env names by grep; Firebase paths by grep of `firebase-storage.js`; global names by grep; vercel/middleware/ignore contents read. No secret value read or written (only names). No runtime file modified (only `docs-context/*.md`). No Drollyv3 text used as current.
-NOT VERIFIED: ClauBack\LXAV1 contents; live Firebase rules vs `database.rules.json`; `RADIO_HIDE` vs `meta/radioHide` precedence; admin role check line-by-line; multi-instance rate-limit behaviour; share of CSS/JS by subsystem (author estimates); the "12 reassigned functions" claim; test suite result at this commit (not re-run); live deploy state; real iPhone/Android behaviour.
+NOT VERIFIED: ClauBack\LXAV1 contents; live Firebase rules vs `database.rules.json`; admin role check line-by-line; multi-instance rate-limit behaviour; share of CSS/JS by subsystem (author estimates); the "12 reassigned functions" claim; test suite result at this commit (not re-run); live deploy state; real iPhone/Android behaviour.
 Not found / absent: `bot-player.js`, `netlify.toml`, Firebase client SDK, Firestore.
