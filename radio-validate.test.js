@@ -137,3 +137,26 @@ describe('applySubmission: the stored row is built by the server only', () => {
     expect(v.applySubmission(b, { u: 'https://x.ro/live', canon: 'x.ro/live', device: 'd2', verdict }, 3000).count).toBe(2);   // the same device again is not a new player
   });
 });
+
+describe('readIcy / songLike / programLike: evidence of songs from the stream (not a listening test)', () => {
+  const icyBody = (metaint, text) => { const audio = Buffer.alloc(metaint, 0x55), block = Buffer.from(text), padded = Buffer.alloc(Math.ceil(block.length / 16) * 16); block.copy(padded); return Buffer.concat([audio, Buffer.from([padded.length / 16]), padded, Buffer.alloc(200, 0x55)]); };
+  const icyResponse = (metaint, text, headers = {}) => { const body = icyBody(metaint, text); let sent = false; return { status: 200, ok: true, headers: { get: k => ({ 'icy-metaint': String(metaint), 'icy-name': 'Test FM', ...headers })[String(k).toLowerCase()] || null }, body: { cancel() {}, getReader() { return { async read() { if (sent) return { done: true }; sent = true; return { value: body, done: false }; }, cancel() {}, closed: Promise.resolve() }; } } }; };
+  test('the StreamTitle is read after metaint bytes of audio; the request asks for metadata', async () => {
+    let asked = null; const r = await v.readIcy('https://live.example.ro/s', { lookup: PUBLIC, fetchFn: async (u, o) => { asked = o.headers; return icyResponse(1024, "StreamTitle='Daft Punk - One More Time';StreamUrl='';"); } });
+    expect(r).toMatchObject({ ok: true, metaint: 1024, title: 'Daft Punk - One More Time', name: 'Test FM' }); expect(asked['icy-metadata']).toBe('1');
+  });
+  test('an empty title, no metadata at all, a private target and a dead server are all answered without an exception', async () => {
+    expect((await v.readIcy('https://live.example.ro/s', { lookup: PUBLIC, fetchFn: async () => icyResponse(512, "StreamTitle='';") })).title).toBe('');
+    expect(await v.readIcy('https://live.example.ro/s', { lookup: PUBLIC, fetchFn: async () => respond({ headers: {} }) })).toMatchObject({ ok: true, metaint: 0, title: '' });
+    const calls = []; expect((await v.readIcy('https://intranet.example.ro/s', { lookup: async () => [{ address: '10.1.1.1', family: 4 }], fetchFn: async u => { calls.push(u); return respond(); } })).why).toBe('blocked'); expect(calls).toHaveLength(0);
+    expect((await v.readIcy('https://dead.example.ro/s', { lookup: PUBLIC, fetchFn: async () => { throw new Error('refused'); } })).ok).toBe(false);
+  });
+  test('songLike: "Artist - Title" yes; the station name, a jingle, an ad, a web address, a broken template, a programme no', () => {
+    for (const t of ['Daft Punk - One More Time', 'Adele – Hello', 'Earth, Wind & Fire - Fantasy']) expect(v.songLike(t, 'Some Radio')).toBe(true);
+    for (const t of ['Heart 80s', 'Heart 80s - Heart 80s', '', 'News - top of the hour', 'www.radio.com - listen live', 'ADWTAG_60000 - THIS STATION WILL CONTINUE AFTER', 'Adela - text="Aint In La" song_spot="M"', 'Telegram - @waveanime', 'Advert: - Live365 - Advertisement', 'STOP ADBREAK 1']) expect(v.songLike(t, 'Heart 80s')).toBe(false);
+  });
+  test('programLike: a talk segment / programme title is not a song and not an ad; ads, jingles, empty and the station name are not "programmes"', () => {
+    expect(v.programLike('Eva von Redecker über Faschismus heute', 'FM4')).toBe(true); expect(v.programLike('Morning Show with Tom', 'X')).toBe(true);
+    for (const t of ['Daft Punk - One More Time', '', 'STOP ADBREAK 1', 'Advert: - Live365 - Advertisement', 'AD 7', 'FM4', ' - ']) expect(v.programLike(t, 'FM4')).toBe(false);
+  });
+});

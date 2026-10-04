@@ -117,6 +117,47 @@ async function readAudio(rawUrl, deps = {}) {
   } finally { clearTimeout(connectTimer); }
 }
 
+// ---- "what is playing now" (ICY metadata): a music station sends "Artist - Title", a news / talk station sends its name or a programme. One short read, same guard as everything else.
+// This is EVIDENCE of songs, not a listening test (there is no decoder here): a station without metadata stays "unknown", it is not condemned.
+async function readIcy(rawUrl, deps = {}) {
+  const timeoutMs = deps.timeoutMs || 4500, fetchFn = deps.fetchFn || ((...args) => fetch(...args));
+  let url = custom.cleanStreamUrl(rawUrl); if (!url) return { ok: false, why: 'bad-url' };
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let response = null;
+    for (let hop = 0; hop <= MAX_HOPS; hop++) {
+      if (!(await custom.assertPublic(new URL(url).hostname, deps.lookup))) return { ok: false, why: 'blocked' };
+      response = await fetchFn(url, { signal: controller.signal, redirect: 'manual', headers: { 'user-agent': UA, 'icy-metadata': '1', accept: '*/*' } });
+      if (response.status >= 300 && response.status < 400 && response.headers.get('location')) { try { response.body && Promise.resolve(response.body.cancel()).catch(() => {}); } catch (error) { /* ignore */ } url = custom.cleanStreamUrl(new URL(response.headers.get('location'), url).href); if (!url) return { ok: false, why: 'bad-redirect' }; response = null; continue; }
+      break;
+    }
+    if (!response || !response.ok || !response.body) return { ok: false, why: 'http' };
+    const metaint = Number(response.headers.get('icy-metaint')) || 0, name = String(response.headers.get('icy-name') || '');
+    if (!(metaint > 0 && metaint <= 65536)) { try { Promise.resolve(response.body.cancel()).catch(() => {}); } catch (error) { /* ignore */ } return { ok: true, metaint: 0, title: '', name }; }
+    const reader = response.body.getReader(), chunks = []; let have = 0, need = metaint + 1, title = '';
+    try { reader.closed.catch(() => {}); } catch (error) { /* ignore */ }
+    while (have < need) {
+      const step = await reader.read(); if (step.done) break; const piece = Buffer.from(step.value); chunks.push(piece); have += piece.length;
+      if (need === metaint + 1 && have >= metaint + 1) { const all = Buffer.concat(chunks); need = metaint + 1 + all[metaint] * 16; if (all[metaint] === 0) { title = ''; break; } }
+    }
+    const all = Buffer.concat(chunks);
+    if (all.length >= need && all.length > metaint + 1) { const block = all.subarray(metaint + 1, need).toString('utf8'); const m = /StreamTitle='((?:[^']|'(?!;))*)'/.exec(block); title = m ? m[1].replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 140) : ''; }
+    try { Promise.resolve(reader.cancel()).catch(() => {}); } catch (error) { /* ignore */ }
+    return { ok: true, metaint, title, name };
+  } catch (error) { return { ok: false, why: error && error.name === 'AbortError' ? 'timeout' : 'unreachable' };
+  } finally { clearTimeout(timer); try { controller.abort(); } catch (error) { /* ignore */ } }
+}
+const AD_LIKE = /adwtag|song_spot|text=|advert|commercial|this station will|stop adbreak|^ad \d+|\bjingle\b|station id|\bpromo\b/i;
+// "Artist - Title" and not the name of the station / a jingle / an address
+function songLike(title, stationName) {
+  const t = String(title || '').trim(); if (t.length < 5 || t.length > 140) return false;
+  if (!/\S\s[-–—]\s\S/.test(t)) return false;
+  const key = text => String(text || '').toLowerCase().replace(/[^a-z0-9]/g, ''), station = key(stationName);
+  if (station.length > 3 && key(t).startsWith(station)) return false;
+  if (/^(news|weather|traffic|advert|commercial|jingle|station id|promo|sports?|live)\b/i.test(t) || /https?:\/\/|www\.|@\w|adwtag|song_spot|text=|advert|commercial|this station will|stop adbreak|\bjingle\b|station id/i.test(t)) return false;   // ads, jingles, web addresses, broken templates are not songs
+  return true;
+}
+
 // ---- the verdict
 const FAIL = why => ({ ok: false, why });
 async function validateStream(input, deps = {}) {
@@ -169,5 +210,7 @@ function applySubmission(current, sub, now) {
   return node;
 }
 
-exports.canonicalStream = canonicalStream; exports.analyze = analyze; exports.readAudio = readAudio; exports.validateStream = validateStream; exports.healthOf = healthOf;
+// text on the air that is neither a song nor an ad / jingle: a talk segment or a programme title
+const programLike = (title, stationName) => { const t = String(title || '').trim(); return Boolean(t) && !songLike(t, stationName) && !AD_LIKE.test(t) && !/^[-–—\s]*$/.test(t) && t.replace(/[^a-z0-9]/gi, '').toLowerCase() !== String(stationName || '').replace(/[^a-z0-9]/gi, '').toLowerCase(); };
+exports.programLike = programLike; exports.readIcy = readIcy; exports.songLike = songLike; exports.canonicalStream = canonicalStream; exports.analyze = analyze; exports.readAudio = readAudio; exports.validateStream = validateStream; exports.healthOf = healthOf;
 exports.applySubmission = applySubmission; exports.compactVerdict = compactVerdict; exports.mp3Header = mp3Header; exports.adtsHeader = adtsHeader; exports.READ_MS = READ_MS;

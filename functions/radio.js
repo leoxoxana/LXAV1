@@ -149,6 +149,13 @@ async function defaultFetchRo(category) {
 async function defaultFetchGlobal() {
   return radioBrowser('/json/stations/search?hidebroken=true&language=english&order=clickcount&reverse=true&limit=500').catch(() => []);
 }
+// GLOBAL must be MUSIC: the directory has to name a music genre in the tags of the station (a station without any tag, like a Lagos news / talk radio, is not listed), news / talk / religion words
+// leave it out, and what plays NOW is read from the stream (ICY "Artist - Title"): confirmed songs rank higher; an empty title is "unknown", not a verdict (Capital, Gold, Heart send none).
+const MUSIC_TAG = /\b(pop|rock|hits?|top ?40|charts?|dance|edm|house|techno|trance|electronic|electro|dj|hip[ -]?hop|rap|r&b|rnb|soul|funk|disco|jazz|blues|country|classic|oldies|retro|[0-9]0s|indie|alternative|metal|punk|reggae|latin|lounge|chill\w*|ambient|downtempo|folk|classical|afrobeats?|k-?pop|j-?pop|dubstep|dnb|nu-?disco|synth\w*|new wave|music)\b/i;
+const hasMusicTag = station => MUSIC_TAG.test(String(station.tags || ''));
+const NATIVE_ENGLISH = new Set(['US', 'GB', 'CA', 'AU', 'IE', 'NZ', 'ZA']), GLOBAL_PER_NATIVE = 24, GLOBAL_PER_OTHER = 2, GLOBAL_OTHER_TOTAL = 10, GLOBAL_PER_BRAND = 4, NATIVE_BONUS = 2.5;   // 2.5 > the 2 of a confirmed song: at equal clicks an English-speaking country wins over a foreign station with a song   // English broadcast from a non-English country is allowed (the language field is often set wrong there), but limited and ranked below
+// the company / network behind a stream: its registrable domain (ice1.somafm.com -> somafm.com, media-ice.musicradio.com -> musicradio.com), so ten channels of one network cannot fill the list
+const brandOf = station => { try { const labels = new URL(streamUrl(station)).hostname.toLowerCase().split('.'); const n = labels.length >= 3 && labels[labels.length - 1].length === 2 && labels[labels.length - 2].length <= 3 ? 3 : 2; return labels.slice(-n).join('.'); } catch (error) { return ''; } };
 const isEnglish = station => /\benglish\b/.test(String(station.language || '').toLowerCase().split(',')[0].trim());   // the FIRST language listed is English ('english', 'british english'); a Portuguese station that also lists English is not
 const globalScore = station => Math.log10(1 + (Number(station.clickcount) || 0)) * 3 + Math.log10(1 + (Number(station.votes) || 0)) * 0.3 + (Number(station.bitrate) >= 96 ? 1 : Number(station.bitrate) >= 64 ? .5 : 0) + (codecOf(station) === 'AAC' ? .2 : 0);
 async function defaultFetchRoAll() { return radioBrowser(`${base}&countrycode=RO&limit=1000`).catch(() => []); }
@@ -158,7 +165,7 @@ async function defaultFetchForeign(category) {
 }
 
 const STYLE_BONUS = { trap: 1.2, new: 0.4 };   // added to the popularity score of a manele station (trap = trap / techno / electro / house / minimal / club / dj)
-const ETNO_MAX = 60, GLOBAL_CANDIDATES = 200, GLOBAL_MAX = 40, GLOBAL_PER_COUNTRY = 6;   // folk / popular / ethno / party-only stations (tiers 3 and 4) are not manele: they go to ETNO
+const ETNO_MAX = 60, GLOBAL_CANDIDATES = 300, GLOBAL_MAX = 50, GLOBAL_ICY_MAX = 130, GLOBAL_ICY_MS = 12000;   // folk / popular / ethno / party-only stations (tiers 3 and 4) are not manele: they go to ETNO
 const maneleTier = item => { const s = item.s || []; if (s.includes('trap')) return 0; if (s.includes('folk') || s.includes('etno')) return 4; if (s.includes('new')) return 1; return item.m ? 2 : 3; };
 const notManele = item => maneleTier(item) >= 3;
 const publicItem = (station, foreign, categoryId) => {
@@ -195,7 +202,7 @@ async function buildList(deps = {}) {
   // wanted (pinned) stations are probed FIRST, with the full timeout: they must not depend on how much of the time budget the bulk probing uses
   // GLOBAL: the most listened English-language music stations of the whole world (any country), probed together with the rest
   const globalCandidates = [], seenGlobal = new Set();
-  try { for (const s of (await (deps.fetchGlobal || defaultFetchGlobal)()).filter(s => usable(s) && isEnglish(s) && !NOT_MUSIC.test(textOf(s))).sort((a, b) => globalScore(b) - globalScore(a))) { const key = streamKey(streamUrl(s)); if (seenGlobal.has(key)) continue; seenGlobal.add(key); globalCandidates.push(s); if (globalCandidates.length >= GLOBAL_CANDIDATES) break; } } catch (error) { /* no global list this time: the rest of the build is not affected */ }
+  try { for (const s of (await (deps.fetchGlobal || defaultFetchGlobal)()).filter(s => usable(s) && isEnglish(s) && hasMusicTag(s) && !NOT_MUSIC.test(textOf(s))).sort((a, b) => globalScore(b) - globalScore(a))) { const key = streamKey(streamUrl(s)); if (seenGlobal.has(key)) continue; seenGlobal.add(key); globalCandidates.push(s); if (globalCandidates.length >= GLOBAL_CANDIDATES) break; } } catch (error) { /* no global list this time: the rest of the build is not affected */ }
   const everything = [...picked.values()].flat();
   await probeMany(everything.filter(s => s.__pin));
   await probeMany([...everything, ...globalCandidates]);
@@ -238,13 +245,20 @@ async function buildList(deps = {}) {
     }
     result.push({ id: category.id, emoji: category.emoji, label: category.label, items });
   }
-  // GLOBAL after the last category: the first GLOBAL_MAX candidates that really play (best score first)
-  // (at most GLOBAL_PER_COUNTRY per country: the raw ranking is dominated by a few big radio countries and would show eight stations of Lagos in a row)
-  const globalItems = [], globalKeys = new Set(), perCountry = new Map();
-  for (const station of globalCandidates) {
-    if (globalItems.length >= GLOBAL_MAX) break; const nk = nameKey(station.name), country = String(station.countrycode || '').toUpperCase();
-    if (probed.get(streamUrl(station)) !== true || globalKeys.has(nk) || (perCountry.get(country) || 0) >= GLOBAL_PER_COUNTRY) continue;
-    globalKeys.add(nk); perCountry.set(country, (perCountry.get(country) || 0) + 1); globalItems.push(publicItem(station, true, 'global'));
+  // GLOBAL after the last category: the best of the candidates that really play. Evidence of songs first (the title that plays NOW, read from the stream for the best ones), then the most listened.
+  // Variety rules: one station per name, one per CURRENT TITLE (stations that play the same feed show the same song), at most GLOBAL_PER_BRAND per network, at most GLOBAL_PER_NATIVE per English-speaking
+  // country and GLOBAL_PER_OTHER per other country (the raw ranking is dominated by a few big radio countries and by networks with dozens of channels).
+  const alive = globalCandidates.filter(s => probed.get(streamUrl(s)) === true).slice(0, GLOBAL_ICY_MAX), icyDeadline = Date.now() + GLOBAL_ICY_MS, icyReader = deps.readIcy || (deps.probe ? async () => ({ ok: false }) : validate.readIcy);
+  let icyNext = 0; await Promise.all(Array.from({ length: 30 }, async () => { while (icyNext < alive.length && Date.now() < icyDeadline) { const s = alive[icyNext++]; try { const icy = await icyReader(streamUrl(s), { timeoutMs: 4500 }); if (icy && icy.ok && icy.title) s.__title = icy.title; } catch (error) { /* unknown stays unknown */ } } }));
+  const rank = row => globalScore(row.s) + (row.song ? 2 : 0) + (NATIVE_ENGLISH.has(String(row.s.countrycode || '').toUpperCase()) ? NATIVE_BONUS : 0);
+  const globalOrder = alive.map(s => ({ s, song: Boolean(s.__title) && validate.songLike(s.__title, s.name) })).sort((a, b) => rank(b) - rank(a));
+  const globalItems = [], globalKeys = new Set(), globalTitles = new Set(), perCountry = new Map(), perBrand = new Map(); let otherTotal = 0;
+  for (const { s: station, song } of globalOrder) {
+    if (globalItems.length >= GLOBAL_MAX) break; const nk = nameKey(station.name), country = String(station.countrycode || '').toUpperCase(), brand = brandOf(station), tk = song ? String(station.__title).toLowerCase().replace(/[^a-z0-9]/g, '') : '', native = NATIVE_ENGLISH.has(country);
+    // outside the English-speaking countries the language field is often wrong: a talk segment on the air (a programme in another language) leaves the station out, and there are at most GLOBAL_OTHER_TOTAL of them
+    if (!native && (otherTotal >= GLOBAL_OTHER_TOTAL || (station.__title && validate.programLike(station.__title, station.name)))) continue;
+    if (globalKeys.has(nk) || (tk && globalTitles.has(tk)) || (perBrand.get(brand) || 0) >= GLOBAL_PER_BRAND || (perCountry.get(country) || 0) >= (NATIVE_ENGLISH.has(country) ? GLOBAL_PER_NATIVE : GLOBAL_PER_OTHER)) continue;
+    if (!native) otherTotal++; globalKeys.add(nk); if (tk) globalTitles.add(tk); perCountry.set(country, (perCountry.get(country) || 0) + 1); perBrand.set(brand, (perBrand.get(brand) || 0) + 1); { const item = publicItem(station, true, 'global'); item.n = item.n.replace(/^[^\p{L}\p{N}]+/u, '') || item.n; globalItems.push(item); }   // names like "# TOP 100 …" / "__80 EXITOS" lose the symbols in front
   }
   result.push({ id: 'global', emoji: '🌍', label: 'GLOBAL', items: globalItems });
   return { updatedAt: now(), cats: result };
@@ -443,4 +457,4 @@ exports.handler = async event => {
   }
 };
 exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.stationIndex = stationIndex; exports.MOVE_TARGETS = MOVE_TARGETS; exports.CUSTOM_TARGETS = CUSTOM_TARGETS; exports.__resetHidden = () => { servingCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
-exports.isEnglish = isEnglish; exports.globalScore = globalScore; exports.knownIndex = knownIndex; exports.healthSweep = healthSweep; exports.playerView = playerView; exports.__resetMemory = () => { memory = null; building = null; };
+exports.hasMusicTag = hasMusicTag; exports.brandOf = brandOf; exports.isEnglish = isEnglish; exports.globalScore = globalScore; exports.knownIndex = knownIndex; exports.healthSweep = healthSweep; exports.playerView = playerView; exports.__resetMemory = () => { memory = null; building = null; };
