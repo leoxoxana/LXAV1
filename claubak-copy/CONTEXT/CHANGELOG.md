@@ -5,6 +5,12 @@ Rewritten from scratch 2026-10-03 (65 commits at that time; the hash is the auth
 
 > Older entries (everything before the last 8 sections) are archived in ClauBack\LXAV1\archive\CHANGELOG-full-through-2026-10-04.md - not needed for normal tasks.
 
+## 2026-10-04 - Radio: server-validated player stations (commits 1ebca9a, f024a06 on main)
+- Owner asked: a player adds a link, can PLAY it at once if it is a real stream, the owner sees every submission automatically in Admin Radio and approves for the public list.
+- New `functions/radio-validate.js`; `radio.js` server `submit`; admin sections PENDING / APPROVED / INVALID-REJECTED / OFFLINE; health check of approved stations (cron + button); the 📨 switch and GET `?resolve=` removed. Index updated (v2.1).
+- Verified: 284 Jest tests; REAL public streams (MP3 128/44.1k, AAC, 48k) validated by the server; web pages and metadata/private addresses refused; the UI (player + admin) driven in headless Chromium against the real handlers with an in-memory DB. NOT verified: sound actually playing in a browser/phone (the sandbox browser has no internet), the daily cron run, Firebase transactions on the real database.
+- Bug found only by the real-stream run: an unhandled AbortError when closing a stream; fixed + test.
+
 ## 2026-10-04 - Master Index v2 + `main` cleanup (docs/cleanup only, no behaviour change)
 - New `CONTEXT\LXAV1_MASTER_INDEX.md` (complete map, baseline `ca2e4ab`). The 4 stale statements found by the first index were fixed (SW cache name, inline scripts/7 tests, copied `?v=` numbers, RADIO_HIDE vs meta/radioHide = additive filters).
 - `main` (commit `ca2e4ab`): removed `docs-context/`, `scripts/build.js`, 13 unreferenced images (3 old icons + 10 source images); `.vercelignore` pruned. Checked reference by reference; no deploy needed.

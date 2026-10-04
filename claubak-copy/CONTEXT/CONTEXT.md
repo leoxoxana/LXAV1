@@ -11,6 +11,8 @@ CHANGELOG.md (what changed and why). The repo no longer carries these notes (`do
 - Asset versions: read them from `index.html` (`?v=` per file; not copied here, they change every edit). Service worker cache `lxa-v3-cache`.
 - Checks (2026-10-04, cloud container): Jest 19 of 20 suites ran, 242 tests passed (`storage-contract` needs `firebase-admin`, 3 tests; total 245); on the owner's PC run `npm test`. ESLint and installability not re-run this round.
 
+> **2026-10-04 (late):** radio validation feature is on `main` (`f024a06`): see CHANGELOG + Master Index §17. Not deployed until the owner runs `vercel --prod`; the local branch `radio-wip-2` (older radio folder move) will conflict.
+
 ## 2. What the last session round did (details in CHANGELOG)
 1. Stake rules: max stake = half the price of the next WILD level (25.5M at WILD 50); "+" up to the whole balance but never above that cap; 50% = half balance clamped; "MAX ..." line under the stake.
 2. Stake can be changed during AUTO (queued for the next round). 3. SPIN ring synced with the real reel timing.

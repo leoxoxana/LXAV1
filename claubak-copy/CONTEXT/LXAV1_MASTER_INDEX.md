@@ -53,7 +53,7 @@ LXAV1
 |---|---|---|---|---|
 | `/` (repo root) | client code, tests, config — flat | runtime + source + tests | yes | no |
 | `api/` | Vercel function adapters (2 files) | runtime | yes | no |
-| `functions/` | server logic (7 files, ~150 KB) | runtime, security-sensitive | yes | `radio*.js` excluded unless radio task |
+| `functions/` | server logic (8 files, ~170 KB) | runtime, security-sensitive | yes | `radio*.js` excluded unless radio task |
 | `assets/` | fonts (8), icons (6 + favicons/apple), letters (6), wild art (2), header webp, Ko-fi gifs (2), `silence.mp3` — 26 files | runtime assets (binary) | yes | **yes** |
 | `.git` | history | generated | — | yes |
 Not in `main` any more: `docs-context/`, `scripts/`, 13 unreferenced images (removed 2026-10-04, `ca2e4ab`).
@@ -67,7 +67,7 @@ Columns: size · role · depends on · consumed by · risk (H/M/L) · read-for-u
 |---|---|---|---|---|---|---|
 | `index.html` | 14 KB/38 l | markup, script/CSS order, radio bar skeleton, `?v=` cache-bust numbers | all client files | browser | M | read only for structure |
 | `style.css` | 42 KB | base styles + `--lxa-*` tokens | — | index | M | no |
-| **`layout-fix.css`** | **442 KB/5954 l** | override layer (see §18) | style.css | index | **H, BIG** | never fully |
+| **`layout-fix.css`** | **444 KB/5974 l** | override layer (see §18) | style.css | index | **H, BIG** | never fully |
 | `responsive-compact.css` | 12 KB | compact breakpoints | — | index, sw | M | no |
 | `game-engine.js` | 49 KB/738 | UMD rules/RTP, `module.exports` + browser global | — | renderer, lxa-account, tests | H | only game math |
 | **`renderer.js`** | **162 KB/1566** | the client app (§18) | game-engine, spin-button, admin-radio | index | **H, BIG** | never fully |
@@ -77,8 +77,8 @@ Columns: size · role · depends on · consumed by · risk (H/M/L) · read-for-u
 | `sw-register.js` | 0.3 KB | registers service worker on `load` | sw.js | index | L | no |
 | `sw.js` | 1.6 KB | network-first service worker, cache `lxa-v3-cache`, hard-coded asset list | file names | browser | M | no (but update when files move) |
 | `manifest.webmanifest` | 0.7 KB | PWA manifest (icons `lxa-icon-*`) | assets | browser | L | no |
-| `radio.js` | 41 KB/392 | radio player, `window.LXARadio` (§17) | DOM ids, `lang` | index | M | exclude |
-| `admin-radio.js` | 20 KB/137 | admin radio tabs, `window.LXAAdminRadio` | 6 renderer names | renderer | M | exclude |
+| `radio.js` | 42 KB/393 | radio player + the add-a-station form (POSTs `submit`), `window.LXARadio` (§17) | DOM ids, `lang`, `lxaAccount`+`lxaToken` (optional: tells the owner who sent a station) | index | M | exclude |
+| `admin-radio.js` | 31 KB/199 | admin radio tabs incl. the player-stations review (sections, details, test again, listen, approve, reject, health), `window.LXAAdminRadio` | 6 renderer names | renderer | M | exclude |
 ### 8.2 Server / API
 | File | Size | Role | Depends on | Consumed by | Risk |
 |---|---|---|---|---|---|
@@ -87,8 +87,9 @@ Columns: size · role · depends on · consumed by · risk (H/M/L) · read-for-u
 | **`functions/lxa-account.js`** | **69 KB/636** | all account/game/admin actions (20) | game-engine, security, firebase-storage, radio (lazy) | api, tests | **H, BIG** |
 | `functions/firebase-storage.js` | 12 KB/286 | the only DB layer | firebase-admin, env | lxa-account, radio | H |
 | `functions/security.js` | 7 KB/231 | validateBet, rate limits, audit/fraud, idempotency | — | lxa-account | H |
-| `functions/radio.js` | 45 KB/404 | list builder, probes, handler | radio-*.js, storage | api/radio, lxa-account | M |
-| `functions/radio-custom.js` | 14 KB | resolves player-added station URLs | — | radio, lxa-account | L |
+| `functions/radio.js` | 51 KB/444 | list builder, probes, handler, **submit** (server validation + duplicate decision + automatic save), health sweep of approved stations | radio-*.js, storage | api/radio, lxa-account | M |
+| `functions/radio-custom.js` | 14 KB | resolves player-added station URLs (playlist / page / https twin) and holds the SSRF guard (`assertPublic`, `cleanStreamUrl`, `safeFetch`) | — | radio, radio-validate, lxa-account | M |
+| `functions/radio-validate.js` | 17 KB/173 | **stream validation**: canonical address, real audio-frame analysis (MP3 / AAC-ADTS / Ogg Opus+Vorbis / FLAC → codec, bitrate, sample rate, channels), the stream held open and timed (stalls, throughput, disconnects), verdict with exact reason, merge of a submission into its row. Audio level / silence NOT measured | radio-custom | radio, lxa-account | M |
 | `functions/radio-popularity.js` | 6 KB | MANELE popularity order | — | radio | L |
 | `functions/radio-reports.js` | 5 KB | player health reports, station key | — | radio, lxa-account | L |
 ### 8.3 Configuration
@@ -176,7 +177,8 @@ Fields: Identity · Entry · Internals · Depends on · Consumers · Data · Con
 | ADMIN (non-radio) | `renderer.js` L259–310 · `lxa-account.js` admin-* | — |
 | FIREBASE DATA | `firebase-storage.js` · `lxa-account.js save()` | `storage-*.test.js`, env names (§16) |
 | RADIO (player) | `radio.js` · `/api/radio` → `functions/radio.js` | `radio-reports.js`, `radio-health.test.js` |
-| RADIO (admin / players' stations) | `admin-radio.js` · `lxa-account.js` `admin-radio` · `radio-custom.js` | `renderer.js` L281–285, 308–309 |
+| RADIO (player adds a station / validation / duplicates) | `functions/radio-validate.js` · `functions/radio.js` `handleSubmit` · `radio.js` `addStation` | `radio-custom.js` (SSRF guard), `radio-health.test.js`, `radio-validate.test.js` |
+| RADIO (admin / players' stations) | `admin-radio.js` · `lxa-account.js` `admin-radio` (suggestions, sug-test, sug-approve, sug-reject, custom-check, customs-check) · `radio-validate.js` | `renderer.js` L281–285, 308–309 |
 | CSS / MOBILE | grep selector in `layout-fix.css`; `responsive-compact.css`; computed styles | `index.html` structure |
 | HEADER / lock / Ko-fi / zoom | `header-fit.js` · `layout-fix.css` (`.topbar`, `.brand`, lock) | `index.html` viewport meta |
 | PAGE EDGES / overscroll | `layout-fix.css` root background blocks · `index.html` | — |
@@ -198,7 +200,7 @@ Fields: Identity · Entry · Internals · Depends on · Consumers · Data · Con
 **Persistence** — every account change = `firebase-storage.updateAccount(key, mutate)` transaction; sessions merged inside the transaction (§14).
 **Radio list** — `radio.js` GET `/api/radio` → `functions/radio.js getList` (memory cache → Firebase `meta/radio` → build from Radio Browser + probes; cron refresh 05:00 UTC; the list rebuilds itself after a deploy because the builder version is hashed) → JSON → `localStorage lxa-radio-list-v3`.
 **Radio playback** — user picks a station → `play()` → one `<audio>`, stream URL direct from the provider → on failure `onBroken` → one retry → mark bad → `sendReport` POST `/api/radio` → `radio-reports` → Firebase `radioReports/*`.
-**Radio user stations** — `+` (private, local `lxa-radio-mine-v1`, max 10, plays at once) · `📨` suggest → POST `/api/radio` → `radioSuggest/<key>` (daily cap `meta/radioSuggestDay`) → admin approves → `meta/radioCustoms`.
+**Radio add-a-station** — INPUT the player pastes a link (`radio.js addStation`) → POST `/api/radio` `{action:'submit', u, n, dev, id?, token?}` → VALIDATION on the SERVER: `cleanStreamUrl` (no user:password@, no localhost / private literals) → canonical address (`radio-validate.canonicalStream`) → DUPLICATE check (public list, approved stations, rejected, an already waiting row) → `resolveStation` (playlist / page / https twin, every hop must be a PUBLIC address) → `readAudio` holds the stream open ~5 s and times every chunk → `analyze` parses real frames (codec, bitrate, sample rate, channels) → verdict (`ok` / exact `why`) → DB `radioSuggest/<canonical key>` in ONE transaction (`applySubmission`: first player creates the row, later players only add themselves; a VALID row is never turned INVALID by a later submission; a reused verdict is not re-stamped) → RESPONSE only what the player may see (playable URL, codec, bitrate, sample rate, channels, stable, `dup`, `queued`) → UI plays it at once (private list `lxa-radio-mine-v1`, max 10) and says "valid — waiting for approval". The login (id + session token) is verified server-side (`lxa-account.verifyPlayer`) and only tells the owner WHO sent it. Owner: admin > RADIO > player stations → TEST AGAIN / listen / APPROVE (→ `meta/radioCustom`, public at the top of the chosen category) / REJECT (→ `meta/radioReject` record).
 **Admin actions** — admin panel → `lxaRequest(action)` (re-asks password for `LXA_PROTECTED_ACTIONS`) → server `isAdminAccount` check (403 otherwise) → DB read/write → RESPONSE → UI cache (`lxaRtpCache`, `lxaPlayersCache`, `lxaRadioCache`).
 **Leaderboard** — written during `spin`; read by action `leaderboard`; strict read, fail closed.
 
@@ -210,6 +212,7 @@ Fields: Identity · Entry · Internals · Depends on · Consumers · Data · Con
 **New-version notice** — `visibilitychange` (renderer L211) → `check()` after 400 ms → compares served version.
 **Header** — `load`, `pageshow`, `resize`, `orientationchange`, `visualViewport resize`, `scroll` in `header-fit.js` (L262–293) recompute lock/Ko-fi/ID/flag positions every frame; the lock blocks scroll only on touch (`pointer:coarse`); `html.lxa-zoomed` lets fingers pan/pinch while zoomed.
 **Radio** — audio events `playing`, `waiting`, `stalled`, `error` (radio.js L223–225), `online`/`offline`; handlers `armFail` (12 s timeout) → `onBroken(attempt)`; **attempt id** `attemptSeq` and `handledAttempt` ignore stale or duplicate signals; `retried` allows one reconnect on the same station, then `markBad`, `nextGood`, up to 4 tries; offline → waits for `online`; MediaSession metadata set on `play`; sleep timer, favourites, recents persist in localStorage.
+**Radio add (player)** — click ▶ in the add box → `unlockAudio()` (silence file, so iOS lets the stream start later) → POST `submit` (≈ 7–8 s on a real stream: resolve + 5 s held open) → `⏳` in `#radioAddMsg` → answer → `saveMine` + `play('fav', 0)` or the exact reason (web page, not audio, no data, disconnects, unstable, not allowed, unreachable, http-only, limit). Server side the verdict is computed once per address; ids: none needed (idempotent by canonical key).
 **Admin radio** — `input`/`change`/`click` in `admin-radio.js` → `lxaRequest('admin-radio', {op})` → server → `LXAAdminRadio.setCategories(...)` → re-render.
 **Service worker** — `load` → register → network-first fetch; navigation falls back to cache offline.
 
@@ -228,16 +231,17 @@ Fields: Identity · Entry · Internals · Depends on · Consumers · Data · Con
 - **Config**: env `FIREBASE_DATABASE_URL` (default URL fallback in `firebase-storage.js`, sanitised), `FIREBASE_SERVICE_ACCOUNT` (JSON, Vercel only). Never in the repo. Project `lxav1-a5cfd`, europe-west1 (older notes).
 - **Access**: server only, `firebase-admin`, `initFirebase()` shared by all storage functions. No client SDK, no listeners, no real-time subscriptions: all reads/writes are request-time.
 - **Rules**: deny-all (`.read`/`.write` false) — VERIFIED 2026-10-04 (owner pasted the live console rules; identical to `database.rules.json`). The admin SDK bypasses rules; rules are changed in the console, Vercel does not deploy them.
-- **Paths (VERIFIED)**: `accounts/<id : name>` · `leaderboard` · `rtpSettings` · `meta/lastAccountId` · `meta/names/<digest>` · `meta/radio` (cached list) · `meta/radioHide` · `meta/radioMove` · `meta/radioFav` (counters) · `meta/radioRejected` · `meta/radioCustoms` · `meta/radioSuggestDay` · `radioReports/<key>` · `radioSuggest/<key>` · `radioFavDev/<device>/<key>`.
+- **Paths (VERIFIED)**: `accounts/<id : name>` · `leaderboard` · `rtpSettings` · `meta/lastAccountId` · `meta/names/<digest>` · `meta/radio` (cached list) · `meta/radioHide` · `meta/radioMove` · `meta/radioFav` (counters) · `meta/radioReject` · `meta/radioCustom` · `meta/radioSuggestDay` · `radioReports/<key>` · `radioSuggest/<key>` · `radioFavDev/<device>/<key>`.
+- **Radio row shapes (VERIFIED)**: `radioSuggest/<key>` (key = hash of the CANONICAL address) = `{u (playable), orig (as typed by the first player), canon, n, first, last, count, devices{}, accounts[{id,name}], by, status VALID|INVALID, v{ok, why, codec, bitrate, sampleRate, channels, stable, stalls, maxGapMs, measuredKbps, ttfbMs, bytes, warnings[], hls, phoneOk, iosOk, from, checkedAt}, checkedAt}` — written ONLY by the server; the audio level is absent (not measured; Firebase drops nulls). `meta/radioCustom/<key>` (key = hash of the PLAYED url, as for hide/move/reports) = `{u, n, c, b, sr, ch, cat, at, orig, by, health{status OK|DEGRADED|OFFLINE, at, why, kbps, stalls, codec, bitrate, warnings}}`. `meta/radioReject/<key>` = `{at, u, n, orig, by}` (older rows: just a time stamp).
 - **Authoritative**: accounts (balance, WILD level, sessions, role), `rtpSettings`, `meta/names`. **Derived**: `leaderboard` (from accounts), `meta/radio` (rebuildable), `meta/radioFav` (from `radioFavDev`).
 - **Writes**: transactions for accounts, id counter, name reservation, reports, favourites; plain `set` for list cache and hide/move/custom nodes.
 - **Conflict points**: key rename on name change (`save()` migration; legacy `account:N` nodes normalised); production still holds test accounts (`zzprobe*`, `lxatest*`, `lxaspd*`, ids 14–19) — the owner deletes them; `rtpSettings` empty in production = code defaults.
 
 ## 16. VERCEL / BACKEND MASTER MAP
-- **Entries**: `/api/lxa-account` (GET/POST/OPTIONS; JSON body `{action,...}`) and `/api/radio` (GET `?refresh/recheck/resolve`, POST actions fav/suggest/report). No redirects or rewrites in `vercel.json`.
+- **Entries**: `/api/lxa-account` (GET/POST/OPTIONS; JSON body `{action,...}`) and `/api/radio` (GET `?refresh/recheck`, POST actions `submit` (alias `suggest`), `fav`, `report`; the old GET `?resolve=` was removed — one validation path). No redirects or rewrites in `vercel.json`.
 - **Account actions (20, VERIFIED)**: `create, login, logout, update, spin, deposit, buy-wild, set-difficulty, reset-geld, reset-new-game, leaderboard, get-rtp-settings, set-rtp-settings, reset-rtp-settings, set-custom-distribution, reset-leaderboard, list-players, admin-update-player, admin-delete-player, admin-radio`.
 - **Headers (all paths)**: no-cache, X-Frame-Options DENY, nosniff, strict referrer, CSP (`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https://*.firebasedatabase.app; media-src 'self' https:; frame-ancestors 'none'`), HSTS, Permissions-Policy (camera/mic/geo/payment/usb off), COOP same-origin. `connect-src` still allows firebasedatabase.app although the client does not use it.
-- **Functions config**: `api/radio.js` maxDuration 60 s; cron `0 5 * * *` GET `/api/radio?refresh=1`; region `fra1`.
+- **Functions config**: `api/radio.js` maxDuration 60 s; cron `0 5 * * *` GET `/api/radio?refresh=1` (also runs the health sweep of approved player stations: oldest check first, 8 per run, stations checked in the last 6 h skipped); region `fra1`.
 - **Env names**: `FIREBASE_DATABASE_URL`, `FIREBASE_SERVICE_ACCOUNT`, `LXA_PEPPER`, `RADIO_HIDE` (optional), `VERCEL_ENV`. Env added after a deploy needs a redeploy (symptom: "Server temporarily unavailable" at login).
 - **Server-authoritative**: spin, deposit, BANK/WILD/GELD, sessions, admin actions, radio list.
 - **Rate limits**: create 5/h (per IP), real login 10/h (per IP), spin 500/h (per account), buy-wild 100/h, global 5000/min — in memory per instance.
@@ -245,18 +249,18 @@ Fields: Identity · Entry · Internals · Depends on · Consumers · Data · Con
 - **Public exposure**: the repo root is the site; `middleware.js` + `.vercelignore` are the only protection for non-asset files.
 
 ## 17. RADIO MASTER MAP
-**Pieces**: client `radio.js` (`window.LXARadio`), `admin-radio.js` (`window.LXAAdminRadio`); server `api/radio.js` → `functions/radio.js` + `radio-custom.js` + `radio-popularity.js` + `radio-reports.js`; Firebase nodes (§15); tests `radio`, `radio-health`, `radio-custom`, `radio-popularity` (129 tests).
+**Pieces**: client `radio.js` (`window.LXARadio`), `admin-radio.js` (`window.LXAAdminRadio`); server `api/radio.js` → `functions/radio.js` + `radio-validate.js` (new) + `radio-custom.js` + `radio-popularity.js` + `radio-reports.js`; Firebase nodes (§15); tests `radio`, `radio-health`, `radio-custom`, `radio-popularity`, `radio-validate`.
 - **Entry/UI**: `#radioBar` (+ `radioPlay/Prev/Next/Title/Name/Status/Vol/Flag/Toggle`) in `index.html`; its own grid row above the Ko-fi goal bar; CSS = tail block of `layout-fix.css` (~L5773–5955, plus ~117 lines mentioning radio overall).
 - **State/persistence (localStorage)**: `lxa-radio-v1` (player state), `lxa-radio-list-v3` (cached list), `lxa-radio-bad-v1` (failed stations, 24 h), `lxa-radio-fav-v1`, `lxa-radio-mine-v1` (user stations, ≤10, private), `lxa-radio-rep-v1`, `lxa-radio-dev-v1` (anonymous device id). One `<audio>`; MediaSession; sleep timer; eco mode; iOS ignores the volume slider.
 - **Categories/stations**: Radio-Browser based (RO HTTPS MP3/AAC), 12 categories (manele, etno, rap, house, techno, dance, pop, rock, chill, retro, global, top — VERIFIED in `CATEGORIES`), MANELE ordered by popularity (`radio-popularity.js`), each station in ≤ 2 categories, hide filters: env `RADIO_HIDE` (name words, at list build) + Firebase `meta/radioHide` (station keys, at serving) — **additive, not competing**; `meta/radioMove` re-categorises; HTTP-only streams excluded (mixed content).
 - **Radio Browser integration**: `radioBrowser()` in `functions/radio.js`, mirrors de1/nl1/at1; server probes (`probeStream`, `diagnose`, double probe server + phone), re-check every 3 h, `blockedUrl` guard.
-- **User stations**: `+` private/instant; `📨` offer to the owner → `radioSuggest`; approval in admin → `meta/radioCustoms`; resolver `radio-custom.resolveStation`.
-- **Admin**: tab in the account panel — renderer L281–285, L308–309 delegate to `LXAAdminRadio`; server action `admin-radio` in `lxa-account.js` (~L561–600): list, hide/show, report rows with resolved ✅, tests, suggestions, approve/reject, move to category.
-- **Radio needs from LXAV1** (VERIFIED): global `lang` (fallback localStorage `lxaLang`); ~28 DOM ids in `index.html`; URL `/api/radio`; shared Vercel project, CSP `media-src https:`. `admin-radio.js` needs six names from `renderer.js`: `lxaRequest, lxaAccount, renderAccountPanel, lxaRadioCache, lang, lxaConfirm`.
-- **LXAV1 needs from Radio**: `window.LXARadio`, `window.LXAAdminRadio`, the `admin-radio` action, radio functions in `firebase-storage.js`, `sw.js` asset entries, ESLint override entry, `vercel.json` cron + `maxDuration`.
+- **User stations**: the player adds a link → the SERVER validates (real audio frames, held open and timed, SSRF-guarded), saves the submission automatically (`radioSuggest`) and the player can PLAY at once; it becomes public only when the owner approves (`meta/radioCustom`). Statuses: PENDING (not yet validated, legacy rows) / VALID / INVALID (waiting rows), APPROVED (+ health OK / DEGRADED / OFFLINE after the periodic check), REJECTED (record kept). Duplicates: decided on the canonical address (http/https, `www.`, ports 80/443, trailing slash, Shoutcast `/;`, tracking parameters are one stream) inside one Firebase transaction. The 📨 switch no longer exists.
+- **Admin**: tab in the account panel — renderer L281–285, L308–309 delegate to `LXAAdminRadio`; the player-stations tab shows sections PENDING / APPROVED / INVALID-REJECTED / OFFLINE with who sent it, original and normalized address, time, validator result (codec, bitrate, sample rate, channels, stability, measured rate, dropouts), duplicate status, last check, and the actions TEST AGAIN (🔄), listen (▶), APPROVE (✅ into any of the 12 categories), REJECT (❌), 🩺 check all approved. Server action `admin-radio` in `lxa-account.js`: list, hide/show, report rows, suggestions, sug-test, sug-approve, sug-reject, custom-check, customs-check, custom-remove, move.
+- **Radio needs from LXAV1** (VERIFIED): global `lang` (fallback localStorage `lxaLang`); optional globals `lxaAccount` + `lxaToken` (to tell the owner who sent a station; the server verifies them with `lxa-account.verifyPlayer`); ~27 DOM ids in `index.html`; URL `/api/radio`; shared Vercel project, CSP `media-src https:`. `admin-radio.js` needs six names from `renderer.js`: `lxaRequest, lxaAccount, renderAccountPanel, lxaRadioCache, lang, lxaConfirm`.
+- **LXAV1 needs from Radio**: `window.LXARadio`, `window.LXAAdminRadio`, the `admin-radio` action, `lxa-account.verifyPlayer` (server), radio functions in `firebase-storage.js` (`updateRadioSuggest`, `getRadioSuggestNode`, `patchRadioCustomHealth`, reject records), `sw.js` asset entries, ESLint override entry, `vercel.json` cron + `maxDuration`.
 - **Embedded in shared files** (count of lines mentioning "radio"): `layout-fix.css` ~117, `firebase-storage.js` ~58, `lxa-account.js` ~30, `renderer.js` ~15, `index.html` 2, `sw.js` 2, `.eslintrc.json` 3, `vercel.json` 2 settings.
 - **External streams/providers**: arbitrary station hosts; `RADIO_HIDE`/hide lists are the moderation tools.
-- **Isolation level today**: partial — own client files, own endpoint and functions, no player login needed; the seam is narrow (list above). A folder move (`radio/`) was started locally (`radio-restructure-wip`, NOT in the baseline).
+- **Isolation level today**: partial — own client files, own endpoint and functions (now incl. `radio-validate.js`), players need no login (the login is optional); the seam is narrow (list above) but grew by two names: `lxaAccount`/`lxaToken` (client, optional) and `verifyPlayer` (server). A folder move (`radio/`) was started locally (`radio-restructure-wip`, NOT in the baseline) and will conflict with these changes.
 
 ## 18. LARGE FILE / MONOLITH MAP
 | File | Size | Subsystems inside | Why big | Extraction risk |
@@ -285,6 +289,7 @@ Read these with grep, never top to bottom.
 
 ## 20. DUPLICATION / CONFLICT MAP (record only)
 - **RESOLVED 2026-10-04**: SW cache name (`lxa-v3-cache` in code; older notes said v2) · ARCHITECTURE.md said "inline scripts / 7 tests" · CONTEXT.md copied `?v=` numbers · `RADIO_HIDE` vs `meta/radioHide` (additive filters). Docs inside `ClauBack\LXAV1\CONTEXT\` still carry the old wording until synced — **CONFLICT / NEEDS RESOLUTION**: source A = ClauBack `CONTEXT\*.md` (written for commit `c82da19`, says Jest 63/63, 7 suites, `origin/main = c82da19`); source B = code at `ca2e4ab` (20 test files). Code wins; ClauBack docs need a refresh.
+- **CORRECTED 2026-10-04** (my own error in index v1/v2): the Firebase paths are `meta/radioReject` and `meta/radioCustom` (not `…Rejected` / `…Customs`) — now read from the code. The `GET /api/radio?resolve=` endpoint and the 📨 switch were removed (one validation path).
 - **Duplicate logic**: WILD placement/payout (client engine vs server); name/id helpers; `lang` fallback in radio.js vs renderer.
 - **Multiple definitions**: renderer base functions re-assigned later (NOT VERIFIED count); old CSS rules overridden by later blocks (≈280 version comments).
 - **Legacy still present**: `responsive-compact.css` (linked, in use), `middleware.js` BLOCKED list names `bot-player.js` (file absent), comments in `api/lxa-account.js` and `middleware.js` mention Netlify; `validateEmail` unused.
@@ -310,11 +315,12 @@ Nothing is currently `OWNERSHIP = UNCLEAR`.
 
 ## 22. SECURITY-SENSITIVE MAP
 Passwords/pepper/hash/sessions/cookie: `functions/lxa-account.js` L73–206 · remembered password handling: `renderer.js` ~L139 · authorization: `isAdminAccount` (L12) + per-action checks + `authorize` · rate limits/fraud/audit: `security.js` · DB boundary: `firebase-storage.js` + `database.rules.json` (deny-all, live-verified) · headers/CSP: `vercel.json` · blocked paths: `middleware.js`, `.vercelignore` · env secrets: Vercel only (names in §16, never values) · server-authoritative money: `spin`, `deposit`, `buy-wild` · user identity: ids and names in `accounts/` + `meta/names` · account recovery: none beyond login (no email flow; `validateEmail` is unused) — a forgotten password needs a manual database edit by the owner.
+Radio add-a-station (new, security-relevant): `functions/radio.js handleSubmit` (public POST, rate limits: 8 submissions per device per hour, 15 validations per visitor per hour, 200 stored per day) → `radio-validate.js` + the SSRF guard in `radio-custom.js` (`cleanStreamUrl`, `assertPublic` on every hop, manual redirects, byte and time limits). Known limit: the guard resolves the name and `fetch` resolves it again (a DNS-rebinding race is not closed; there is no way to pin the address with the built-in `fetch`). The player cannot set status / verdict / approval / ownership; the account is recorded only after `lxa-account.verifyPlayer` accepts the session token.
 Never print or commit: service-account JSON, `LXA_PEPPER`, `.env.local`.
 
 ## 23. TEST / VERIFICATION MAP
-- Run: `npm test` (Jest, 20 files, 245 tests; in a cloud container without `firebase-admin` installed `storage-contract.test.js` cannot load — environment issue, not a code failure), `npm run lint`. Dev: `audit-simulations.js` (RTP simulations), `deployment-check.js` (client/server rule sync), `local-server.js` (**production Firebase** — guest mode only).
-- **By area**: game → `game-engine`, `rtp-linked`; account/auth → `account-keys`, `account-id-counter`, `auth-session`, `session-cookie`, `session-race`, `name-race`, `idempotency`, `storage-contract`, `storage-failure`; leaderboard → `leaderboard-truth`, `leaderboard-position`; money/UI routing → `rtp-linked-server`, `spin-grid-letters`, `renderer-money-routing`; radio → `radio`, `radio-health`, `radio-custom`, `radio-popularity`.
+- Run: `npm test` (Jest, 21 files, 284 tests; in a cloud container without `firebase-admin` installed `storage-contract.test.js` cannot load — environment issue, not a code failure), `npm run lint`. Dev: `audit-simulations.js` (RTP simulations), `deployment-check.js` (client/server rule sync), `local-server.js` (**production Firebase** — guest mode only).
+- **By area**: game → `game-engine`, `rtp-linked`; account/auth → `account-keys`, `account-id-counter`, `auth-session`, `session-cookie`, `session-race`, `name-race`, `idempotency`, `storage-contract`, `storage-failure`; leaderboard → `leaderboard-truth`, `leaderboard-position`; money/UI routing → `rtp-linked-server`, `spin-grid-letters`, `renderer-money-routing`; radio → `radio`, `radio-health` (incl. the player-submission → admin → public pipeline), `radio-custom`, `radio-popularity`, `radio-validate` (canonical addresses, frame analysis, timing, SSRF, verdicts). Runtime check used 2026-10-04: a harness serving the real site + the real `api/` handlers with an in-memory database and the REAL validation of real public streams (headless Chromium for the UI); the script is not kept in the repo.
 - Server tests `require` `functions/*.js` directly with mocked storage.
 - **UI/layout has no automated tests in the repo.** Past checks used headless Edge via CDP scripts kept in session scratchpads (lost between sessions; some may exist in `ClauBack\LXAV1\vN\` as `e2e_*.js`, `deep_b2.js`: NOT VERIFIED). Page-edge/header checks = pixel sampling of a full-page screenshot.
 - Not verifiable here: real iPhone/Android, Safari/Firefox, installed PWA, `@property` ring on iOS < 16.4.
@@ -388,10 +394,10 @@ Update this file whenever a change alters: file location · module ownership · 
 ## 33. BASELINE SNAPSHOT
 | Field | Value |
 |---|---|
-| Marker | MASTER INDEX BASELINE v2 |
+| Marker | MASTER INDEX BASELINE v2.1 (radio flow updated) |
 | Date | 2026-10-04 |
 | Project path | `C:\Users\leon4\Desktop\LXAV1` (GitHub `leoxoxana/LXAV1`) |
-| Observed commit | `ca2e4ab` (`origin/main`, after removing `docs-context/`, `scripts/build.js` and 13 unreferenced images) |
+| Observed commit | `f024a06` (`origin/main`: radio validation + player submissions; before it `ca2e4ab` = cleanup) |
 | Workspace path | `C:\Users\leon4\Desktop\ClauBack\LXAV1\CONTEXT` |
 | Scope | whole repo + ClauBack notes as copied to branch `claubak-docs` |
 | Verification status | see §32 (VERIFIED / NOT VERIFIED lists) |
