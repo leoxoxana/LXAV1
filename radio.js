@@ -9,6 +9,7 @@
       panel = $('radioPanel'), catsEl = $('radioCats'), searchEl = $('radioSearch'), diceBtn = $('radioDice'), favBtn = $('radioFav'), recentBtn = $('radioRecent'), listEl = $('radioList'),
       sleepEl = $('radioSleep'), ecoEl = $('radioEco'), ecoLabel = $('radioEcoLabel'), msgEl = $('radioMsg'),
       addBtn = $('radioAddBtn'), addBox = $('radioAdd'), addUrl = $('radioAddUrl'), addName = $('radioAddName'), addGo = $('radioAddGo'), addClose = $('radioAddClose'), addMsg = $('radioAddMsg');
+  var findItems = [];
   var KEY = 'lxa-radio-v1', LIST_KEY = 'lxa-radio-list-v3', BAD_KEY = 'lxa-radio-bad-v1', FAV_KEY = 'lxa-radio-fav-v1', RECENT_KEY = 'lxa-radio-recent-v1';
   var LIST_TTL = 30 * 60 * 1000, BAD_TTL = 24 * 3600 * 1000, ECO_KBPS = 96, MAX_FAV = 60, MAX_RECENT = 5;
   var TEXT = {
@@ -99,6 +100,7 @@
   function cat(id) {
     if (id === 'fav') { var mineItems = mine(), starred = favs().filter(function (f) { return !mineItems.some(function (m) { return m.u === f.u; }); }); return { id: 'fav', items: mineItems.concat(starred) }; }   // MY stations first, then the stars
     if (id === 'recent') return { id: 'recent', items: recents() };
+    if (id === 'find') return { id: 'find', items: findItems };
     var c = catRaw(id); if (!c) return null;
     return c;
   }
@@ -195,7 +197,7 @@
       var name = document.createElement('span'); name.className = 'radio-st-name';
       if (view === 'cat' && !q && r.it.top) { var top = document.createElement('span'); top.className = 'radio-top'; top.textContent = '🔥'; top.setAttribute('aria-hidden', 'true'); name.appendChild(top); }   // 🔥 = one of the three most popular stations of the category (flag from the server); it sits INSIDE the name, so the row layout (name left, quality right) stays the same
       name.appendChild(document.createTextNode(r.it.n));
-      var meta = document.createElement('small'); meta.textContent = (r.it.mine ? '🔗 ' : '') + (r.cid === 'manele' && r.it.s ? r.it.s.map(function (s) { return STYLE_ICON[s] || ''; }).join('') + ' ' : '') + (r.it.cc && r.it.cc !== 'RO' ? r.it.cc + ' · ' : '') + r.it.c + (r.it.b ? ' ' + r.it.b : '');
+      var meta = document.createElement('small'); meta.textContent = (r.it.mine ? '🔗 ' : '') + (r.cid === 'manele' && r.it.s ? r.it.s.map(function (s) { return STYLE_ICON[s] || ''; }).join('') + ' ' : '') + (r.it.f ? r.it.f + ' · ' : '') + (r.it.cc && r.it.cc !== 'RO' ? r.it.cc + ' · ' : '') + r.it.c + (r.it.b ? ' ' + r.it.b : '');
       b.appendChild(name); b.appendChild(meta);
       b.addEventListener('click', function () { if (r.i >= 0) play(r.cid, r.i, false); else { var cc = cat(r.cid), k = cc ? indexOfUrl(cc.items, r.it.u) : -1; play(r.cid, k >= 0 ? k : 0, false, k >= 0 ? undefined : r.it); } afterPick(); });
       var star = document.createElement('button'); star.type = 'button'; star.className = 'radio-star'; var isF = faved.indexOf(r.it.u) !== -1;
@@ -390,4 +392,54 @@
 
   setState('idle', ''); applyText();
   window.LXARadio = { state: function () { return { state: state, view: view, cat: catId, current: currentItem() || null, tries: tries, status: statusKey, eco: eco, dir: lastDir, retried: retried }; }, audio: function () { return audio; }, bad: bad, stats: stat, deviceId: deviceId };
+
+  // ---- FIND: any country, exact frequency, auto scanner (data comes from the directory through /api/radio?browse=...; the frequency is read from station names, so a station that does not write it cannot be found)
+  var fb = $('radioFindBtn'), fbox = $('radioFind'), fcc = $('radioFindCc'), ff = $('radioFindF'), fgo = $('radioFindGo'), sa = $('radioScanA'), sb = $('radioScanB'), sgo = $('radioScanGo'), fclose = $('radioFindClose'), fmsg = $('radioFindMsg');
+  if (fb && fbox) (function () {
+    var T = { de: { n: 'Keine Sender mit dieser Frequenz.', bad: 'Ungültige Eingabe.', fail: 'Nicht erreichbar.', all: 'Alle Länder', stop: 'Stopp', scanning: 'Scan…', done: 'Scan fertig: ', st: ' Sender', warn: 'Prüfung: ' }, ro: { n: 'Nicio stație pe această frecvență.', bad: 'Valoare invalidă.', fail: 'Indisponibil.', all: 'Toate țările', stop: 'Stop', scanning: 'Scanare…', done: 'Scanare gata: ', st: ' stații', warn: 'Verificare: ' }, en: { n: 'No stations on this frequency.', bad: 'Invalid input.', fail: 'Unavailable.', all: 'All countries', stop: 'Stop', scanning: 'Scanning…', done: 'Scan done: ', st: ' stations', warn: 'Check: ' } };
+    var X = function () { var l = typeof lang === 'string' ? lang : ''; return T[l] || T.en; }, say = function (t) { fmsg.textContent = t || ''; }, loaded = false, scanTimer = 0, myCc = '';
+    var api = function (q) { return fetch('/api/radio?' + q, { cache: 'no-cache' }).then(function (r) { return r.json(); }); };
+    function show() { view = 'find'; searchEl.value = ''; if (data) { renderCats(); renderList(); } else fetchList().then(function () { renderCats(); renderList(); }).catch(function () { /* shown */ }); }
+    function loadCountries() {
+      if (loaded) return; loaded = true;
+      api('browse=countries').then(function (r) {
+        var o = document.createElement('option'); o.value = ''; o.textContent = X().all; fcc.appendChild(o);
+        (r.countries || []).forEach(function (c) { var e = document.createElement('option'); e.value = c.cc; e.textContent = c.name + ' (' + c.cc + ')'; fcc.appendChild(e); });
+        myCc = r.mine || ''; try { var saved = localStorage.getItem('lxa-radio-cc'); fcc.value = saved !== null ? saved : myCc; } catch (e) { fcc.value = myCc; } if (fcc.value !== (saved || myCc)) fcc.value = '';
+      }).catch(function () { loaded = false; say(X().fail); });
+    }
+    function openFind(open) { fbox.hidden = !open; fb.setAttribute('aria-expanded', open ? 'true' : 'false'); fb.classList.toggle('on', open); if (open) { if (panel.hidden) openPanel(true); loadCountries(); say(''); try { ff.focus(); } catch (e) { /* ignore */ } } else { stopScan(); if (view === 'find') { view = 'cat'; if (data) { renderCats(); renderList(); } } } }
+    function stopScan() { clearTimeout(scanTimer); scanTimer = 0; sgo.textContent = '▶'; sgo.setAttribute('aria-label', 'Scan'); }
+    function remember() { try { localStorage.setItem('lxa-radio-cc', fcc.value); } catch (e) { /* ignore */ } }
+    function results(items) { findItems = items.map(function (i) { var o = cleanItem(i); if (o) { o.f = i.f; o.cc = i.cc || ''; } return o; }).filter(Boolean); show(); }
+    fb.addEventListener('click', function () { openFind(fbox.hidden); });
+    fclose.addEventListener('click', function () { openFind(false); });
+    fcc.addEventListener('change', remember);
+    function search() {
+      stopScan(); var f = ff.value.trim(); if (!/^\d{2,4}([.,]\d{1,2})?$/.test(f)) { say(X().bad); return; }
+      remember(); say(X().scanning); fgo.disabled = true;
+      api('browse=freq&cc=' + encodeURIComponent(fcc.value) + '&f=' + encodeURIComponent(f)).then(function (r) {
+        fgo.disabled = false; if (r.error) { say(X().bad); return; }
+        results(r.items || []); say((r.items || []).length ? (r.items.length + X().st + ' · ' + f) : X().n);
+      }).catch(function () { fgo.disabled = false; say(X().fail); });
+    }
+    fgo.addEventListener('click', search); ff.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); search(); } });
+    // scanner: ONE request returns every frequency of the range that has stations; they are then revealed one by one (the sweep), Stop ends it
+    sgo.addEventListener('click', function () {
+      if (scanTimer) { stopScan(); say(X().stop); return; }
+      var a = sa.value.trim(), b = sb.value.trim(); if (!fcc.value || !/^\d{2,4}([.,]\d{1,2})?$/.test(a) || !/^\d{2,4}([.,]\d{1,2})?$/.test(b)) { say(X().bad); return; }
+      remember(); say(X().scanning); findItems = []; show(); sgo.textContent = '■'; sgo.setAttribute('aria-label', X().stop);
+      scanTimer = -1;
+      api('browse=scan&cc=' + encodeURIComponent(fcc.value) + '&from=' + encodeURIComponent(a) + '&to=' + encodeURIComponent(b)).then(function (r) {
+        if (scanTimer !== -1) return;   // stopped meanwhile
+        if (r.error) { stopScan(); say(X().bad); return; }
+        var found = r.found || [], k = 0;
+        (function step() {
+          if (k >= found.length) { stopScan(); say(X().done + r.total + X().st); return; }
+          var g = found[k++]; say(X().scanning + ' ' + g.f); findItems = findItems.concat(g.items.map(function (i) { var o = cleanItem(i); if (o) { o.f = g.f; o.cc = i.cc || ''; } return o; }).filter(Boolean)); renderList();
+          scanTimer = setTimeout(step, 250);
+        })();
+      }).catch(function () { stopScan(); say(X().fail); });
+    });
+  })();
 })();

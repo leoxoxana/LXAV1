@@ -450,7 +450,7 @@ async function knownIndex(storage) {
   return known;
 }
 // the part of a verdict a player may see (the technical details stay with the owner)
-const playerView = (verdict, extra) => ({ ok: Boolean(verdict.ok), status: verdict.ok ? 'VALID' : 'INVALID', why: verdict.ok ? '' : String(verdict.why || 'unreachable'), url: verdict.ok ? verdict.url : '', name: String(verdict.name || ''), codec: String(verdict.codec || ''), bitrate: Number(verdict.bitrate) || 0,
+const playerView = (verdict, extra) => ({ ok: Boolean(verdict.ok), status: verdict.ok ? 'VALID' : 'INVALID', state: validate.stateOf(verdict), why: verdict.ok ? '' : String(verdict.why || 'unreachable'), url: verdict.ok ? verdict.url : '', name: String(verdict.name || ''), codec: String(verdict.codec || ''), bitrate: Number(verdict.bitrate) || 0,
   sampleRate: Number(verdict.sampleRate) || 0, channels: Number(verdict.channels) || 0, stable: verdict.stable === undefined ? null : verdict.stable, warnings: verdict.warnings || [], hls: Boolean(verdict.hls), iosOk: verdict.iosOk !== false, phoneOk: verdict.phoneOk !== false, ...extra });
 async function handleSubmit(body, event, storage) {
   const raw = String(body.u || '').trim(), dev = String(body.dev || ''), headers = (event && event.headers) || {};
@@ -495,11 +495,20 @@ async function healthSweep(storage, { max = 8, budgetMs = 25000, durationMs = 30
   await Promise.all([worker(), worker(), worker()]);
   return results;
 }
+// CHECK: validates ONE stream for the player (VALID / INVALID with the reason) and saves nothing: used before playing a station found by frequency
+async function handleCheck(body, event) {
+  const raw = String(body.u || '').trim(), headers = (event && event.headers) || {}, who = String(headers['x-vercel-forwarded-for'] || headers['x-forwarded-for'] || 'anon').split(',')[0].trim();
+  const input = raw && raw.length <= custom.MAX_URL ? custom.cleanStreamUrl(raw) : null;
+  if (!input) return reply({ ok: false, status: 'INVALID', why: raw ? blockedWhy(raw) : 'bad-url' }, 200, { 'cache-control': 'no-store' });
+  if (!reports.allow('chk' + who, Date.now(), 20)) return reply({ ok: false, status: 'INVALID', why: 'limit' }, 429, { 'cache-control': 'no-store' });
+  try { return reply(playerView(await validator(input, { durationMs: validate.READ_MS }), { queued: false }), 200, { 'cache-control': 'no-store' }); } catch (error) { return reply({ error: 'unavailable' }, 503, { 'cache-control': 'no-store' }); }
+}
 async function handleReport(event, storage) {
   const raw = String(event.body || ''); if (raw.length > reports.MAX_BODY) return reply({ error: 'Too large.' }, 413, { 'cache-control': 'no-store' });
   let body; try { body = JSON.parse(raw || '{}'); } catch (error) { return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' }); }
   if (body && body.action === 'fav') return handleFav(body, storage);
   if (body && (body.action === 'submit' || body.action === 'suggest')) return handleSubmit(body, event, storage);
+  if (body && body.action === 'check') return handleCheck(body, event);
   const headers = event.headers || {}, report = body && body.action === 'report' ? reports.cleanReport(body, headers['user-agent'] || headers['User-Agent']) : null;
   if (!report) return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' });
   if (!reports.allow(report.dev)) return reply({ error: 'Too many reports.' }, 429, { 'cache-control': 'no-store' });
@@ -511,12 +520,26 @@ async function handleReport(event, storage) {
   return reply({ ok: true }, 200, { 'cache-control': 'no-store' });
 }
 
+// BROWSE (any country, frequency search, scanner) and CHECK (one-station validation without saving): see radio-browse.js
+let browser = null;
+const getBrowser = () => browser || (browser = require('./radio-browse').create({ rb: radioBrowser, usable, toItem: station => publicItem(station, true, 'browse'), canonical: validate.canonicalStream }));
+exports.__setBrowser = b => { browser = b; };
+async function handleBrowse(query, event) {
+  const headers = (event && event.headers) || {}, who = String(headers['x-vercel-forwarded-for'] || headers['x-forwarded-for'] || 'anon').split(',')[0].trim(), br = require('./radio-browse'), cc = br.cleanCc(query.cc), kind = String(query.browse);
+  if (!reports.allow('brw' + who, Date.now(), 40)) return reply({ error: 'limit' }, 429, { 'cache-control': 'no-store' });
+  try {
+    if (kind === 'countries') return reply({ countries: await getBrowser().countries(), mine: br.cleanCc(headers['x-vercel-ip-country']) }, 200, { 'cache-control': 'public, max-age=3600' });
+    const out = kind === 'freq' ? await getBrowser().search(cc, query.f) : kind === 'scan' ? await getBrowser().scan(cc, query.from, query.to) : { error: 'bad-request' };
+    return reply(out, out.error ? 400 : 200, { 'cache-control': 'public, max-age=300' });
+  } catch (error) { return reply({ error: 'unavailable' }, 503, { 'cache-control': 'no-store' }); }
+}
 exports.handler = async event => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'Content-Type' }, body: '' };
   if (event.httpMethod !== 'GET' && event.httpMethod !== 'POST') return reply({ error: 'Method not allowed.' }, 405);
   let storage = null; try { storage = require('./firebase-storage'); } catch (error) { storage = null; }
   if (event.httpMethod === 'POST') return handleReport(event, storage);
   const query = event.queryStringParameters || {};
+  if (query.browse) return handleBrowse(query, event);
   try {
     const { data, stale, rechecked } = await getList({ refresh: String(query.refresh || '') === '1', recheck: String(query.recheck || '') === '1', storage });
     const state = await servingState(storage);

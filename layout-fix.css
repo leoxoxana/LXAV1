@@ -5978,3 +5978,9 @@ html body:not(#_):not(#__):not(#___):not(#____) .radio-sug .radio-sug-name{width
 html body:not(#_):not(#__):not(#___):not(#____) .radio-sug .player-row-info small{max-width:100%!important;overflow-wrap:anywhere!important;word-break:break-all!important}
 html body:not(#_):not(#__):not(#___):not(#____) .radio-sug .radio-station-actions{display:grid!important;grid-template-columns:repeat(2,32px)!important;gap:6px!important;flex:0 0 auto!important;align-self:flex-start!important}
 html body:not(#_):not(#__):not(#___):not(#____) .radio-sug .radio-move-panel{flex:1 0 100%!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-find select{width:100%!important;min-width:0!important;height:34px!important;margin:0 0 6px!important;box-sizing:border-box!important;font-size:13px!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-find .radio-add-row{margin-bottom:6px!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-find .radio-add-row input{flex:1 1 0!important;width:auto!important;min-width:0!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-find .radio-add-row .radio-mini{flex:0 0 40px!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-find{display:block!important;min-width:0!important;max-width:100%!important;width:100%!important;box-sizing:border-box!important;overflow:hidden!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-find select,html body:not(#_):not(#__):not(#___):not(#____) .radio-find input{max-width:100%!important;text-overflow:ellipsis!important}

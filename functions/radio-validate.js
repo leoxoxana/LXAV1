@@ -212,5 +212,16 @@ function applySubmission(current, sub, now) {
 
 // text on the air that is neither a song nor an ad / jingle: a talk segment or a programme title
 const programLike = (title, stationName) => { const t = String(title || '').trim(); return Boolean(t) && !songLike(t, stationName) && !AD_LIKE.test(t) && !/^[-–—\s]*$/.test(t) && t.replace(/[^a-z0-9]/gi, '').toLowerCase() !== String(stationName || '').replace(/[^a-z0-9]/gi, '').toLowerCase(); };
-exports.programLike = programLike; exports.readIcy = readIcy; exports.songLike = songLike; exports.canonicalStream = canonicalStream; exports.analyze = analyze; exports.readAudio = readAudio; exports.validateStream = validateStream; exports.healthOf = healthOf;
+exports.programLike = programLike; exports.readIcy = readIcy; exports.songLike = songLike; exports.canonicalStream = canonicalStream; exports.analyze = analyze; exports.readAudio = readAudio; exports.validateStream = validateStream; // the six states shown to people: VALID / DEGRADED (plays, with warnings) / OFFLINE (no answer, dropped) / NO AUDIO (answers but no audio: HTML page, no data) / UNSUPPORTED (HLS, unknown format) / INVALID (bad or blocked address)
+const stateOf = verdict => {
+  if (!verdict) return 'OFFLINE';
+  if (verdict.ok) return verdict.warnings && verdict.warnings.length ? 'DEGRADED' : 'VALID';
+  const why = String(verdict.why || '');
+  if (verdict.hls || why === 'hls' || why === 'unsupported') return 'UNSUPPORTED';
+  if (['html', 'no-data', 'not-audio'].includes(why)) return 'NO AUDIO';
+  if (why === 'unstable') return 'DEGRADED';
+  if (['unreachable', 'timeout', 'http', 'disconnects'].includes(why)) return 'OFFLINE';
+  return 'INVALID';
+};
+exports.stateOf = stateOf; exports.healthOf = healthOf;
 exports.applySubmission = applySubmission; exports.compactVerdict = compactVerdict; exports.mp3Header = mp3Header; exports.adtsHeader = adtsHeader; exports.READ_MS = READ_MS;
