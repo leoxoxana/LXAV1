@@ -704,7 +704,7 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
           `${T118('round')} ${String(gameState.round).padStart(3, '0')}`,
           `${T118('rank')} #${lxaAccount.position || '—'}`,
           difficultyName
-        ].map((part, index) => `<span class="status-part${index === 2 ? ' status-rank' : ''}">${part}</span>`).join('');   // .status-rank: the leaderboard answer fills it in directly, also while AUTO is spinning
+        ].map((part, index) => `<span class="status-part status-${['id', 'round', 'rank', 'diff'][index]}"${index === 3 ? ` data-level="${Math.min(2, Math.max(0, gameState.difficulty - 1))}"` : ''}>${part}</span>`).join('');   // .status-rank: the leaderboard answer fills it in directly, also while AUTO is spinning
         lbRank.style.removeProperty('display');
         // V326: .console-top>span:last-child forces display:inline-block
         // !important in layout-fix.css, so hiding these needs !important too.
@@ -722,7 +722,7 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
           T118('guest'),
           `${T118('round')} ${String(gameState.round).padStart(3, '0')}`,
           guestDifficultyName
-        ].map(part => `<span class="status-part">${part}</span>`).join('');
+        ].map((part, index) => `<span class="status-part status-${['guest', 'round', 'diff'][index]}"${index === 2 ? ` data-level="${Math.min(2, Math.max(0, gameState.difficulty - 1))}"` : ''}>${part}</span>`).join('');
         lbRank.style.removeProperty('display');
         if (fieldLabel) fieldLabel.style.setProperty('display', 'none', 'important');
         if (systemLabel) systemLabel.style.setProperty('display', 'none', 'important');
