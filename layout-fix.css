@@ -5972,3 +5972,9 @@ html body:not(#_):not(#__):not(#___):not(#____) .radio-sug-grid span{opacity:.65
 html body:not(#_):not(#__):not(#___):not(#____) .radio-sug-grid span::after{content:': '}
 html body:not(#_):not(#__):not(#___):not(#____) .radio-sug-grid b{font-weight:600!important}
 html body:not(#_):not(#__):not(#___):not(#____) .radio-st,html body:not(#_):not(#__):not(#___):not(#____) .radio-sug .radio-badge{min-height:0!important;height:auto!important;width:auto!important;line-height:1.6!important;display:inline-block!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-sug{align-items:flex-start!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-sug .player-row-info{flex:1 1 0!important;min-width:0!important;max-width:100%!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-sug .radio-sug-name{width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-sug .player-row-info small{max-width:100%!important;overflow-wrap:anywhere!important;word-break:break-all!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-sug .radio-station-actions{display:grid!important;grid-template-columns:repeat(2,32px)!important;gap:6px!important;flex:0 0 auto!important;align-self:flex-start!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-sug .radio-move-panel{flex:1 0 100%!important}
