@@ -156,3 +156,84 @@ describe('best two categories + moderation', () => {
     expect(radio.usable(st({ name: 'My BAD Radio' }))).toBe(true);
   });
 });
+
+describe('http-only stations: the https twin is probed', () => {
+  const run = (ro, probe) => radio.buildList({ fetchRo: async () => ro, fetchRoAll: async () => [], fetchForeign: async () => [], probe, now: Date.now });
+  const items = (data, id) => data.cats.find(c => c.id === id).items;
+  const plain = (over = {}) => st({ url_resolved: 'http://live.example.ro:8132/stream', tags: 'manele', name: 'Trapanele Radio', ...over });
+
+  test('upgradable(): only a plain-http station that would be fine over https', () => {
+    expect(radio.upgradable(plain())).toBe(true);
+    expect(radio.upgradable(plain({ lastcheckok: 0 }))).toBe(false);
+    expect(radio.upgradable(plain({ codec: 'FLV' }))).toBe(false);
+    expect(radio.upgradable(st())).toBe(false);   // already https
+    expect(radio.upgraded(plain()).url_resolved).toBe('https://live.example.ro:8132/stream');
+  });
+  test('an http-only station whose https twin delivers audio is listed WITH the https url', async () => {
+    const data = await run([plain()], async url => url === 'https://live.example.ro:8132/stream');
+    expect(items(data, 'manele').map(i => i.u)).toEqual(['https://live.example.ro:8132/stream']);
+  });
+  test('an http-only station whose https twin does not answer is dropped; an http url never reaches the player', async () => {
+    const data = await run([plain(), st({ tags: 'manele', name: 'Fine Manele' })], async url => url.startsWith('https://s'));
+    const all = data.cats.flatMap(c => c.items);
+    expect(all.some(i => i.n === 'Trapanele Radio')).toBe(false);
+    expect(all.every(i => /^https:\/\//.test(i.u))).toBe(true);
+    expect(items(data, 'manele').map(i => i.n)).toEqual(['Fine Manele']);
+  });
+});
+
+describe('pinned words', () => {
+  test('a "trapanele" station with no clicks is probed and listed even when many better-scored manele stations exist', async () => {
+    const crowd = Array.from({ length: 80 }, (_, i) => st({ name: 'Manele Crowd ' + i, tags: 'manele', clickcount: 5000 - i }));
+    const tiny = st({ name: 'Trapanele Radio', tags: 'manele', clickcount: 0, votes: 1, url_resolved: 'http://live.example.ro:8132/stream' });
+    const data = await radio.buildList({ fetchRo: async () => [...crowd, tiny], fetchRoAll: async () => [], fetchForeign: async () => [], probe: async () => true, now: Date.now });
+    const manele = data.cats.find(c => c.id === 'manele').items;
+    expect(manele.some(i => i.n === 'Trapanele Radio' && i.u === 'https://live.example.ro:8132/stream')).toBe(true);
+  });
+});
+
+describe('second chance for failed probes', () => {
+  test('a healthy station that fails the first probe under load is listed after the second try; a really dead one stays out', async () => {
+    const slow = st({ name: 'Slow Manele', tags: 'manele' }), dead = st({ name: 'Dead Manele', tags: 'manele' });
+    const calls = {};
+    const probe = async url => { calls[url] = (calls[url] || 0) + 1; if (url === dead.url_resolved) return false; return calls[url] >= 2; };   // slow: fails once, then answers
+    const data = await radio.buildList({ fetchRo: async () => [slow, dead], fetchRoAll: async () => [], fetchForeign: async () => [], probe, now: Date.now });
+    const names = data.cats.find(c => c.id === 'manele').items.map(i => i.n);
+    expect(names).toEqual(['Slow Manele']);
+    expect(calls[dead.url_resolved]).toBe(2);   // tried twice, then given up
+  });
+});
+
+describe('styles of manele', () => {
+  const run = ro => radio.buildList({ fetchRo: async () => ro, fetchRoAll: async () => [], fetchForeign: async () => [], probe: async () => true, now: Date.now });
+  const manele = data => data.cats.find(c => c.id === 'manele').items;
+  test('styleOf recognises old / new / trap / etno / folk from tags and names', () => {
+    expect(radio.styleOf(st({ tags: 'hip-hop,manele,rap,trap' }))).toContain('trap');
+    expect(radio.styleOf(st({ tags: 'club,dance,manele' }))).toContain('trap');
+    expect(radio.styleOf(st({ name: 'Tehno Manele Live', tags: 'manele' }))).toContain('trap');
+    expect(radio.styleOf(st({ tags: 'manele noi' }))).toContain('new');
+    expect(radio.styleOf(st({ name: 'Radio Manele Vechi', tags: 'manele' }))).toContain('old');
+    expect(radio.styleOf(st({ tags: 'etno,manele' }))).toContain('etno');
+    expect(radio.styleOf(st({ name: 'Taraf Romania - Radio Manele', tags: 'manele' }))).toContain('etno');
+    expect(radio.styleOf(st({ tags: 'manele,petrecere' }))).toEqual([]);
+  });
+  test('folk: "muzica populara" / folclor yes; the party tag "populara" alone no; multi-genre stations no', () => {
+    expect(radio.isFolk(st({ name: 'Radio Folclor', tags: 'folclor,folk,petrecere' }))).toBe(true);
+    expect(radio.isFolk(st({ name: 'Antena Satelor', tags: 'muzică populară,news' }))).toBe(true);
+    expect(radio.isFolk(st({ name: 'Super Popular', tags: 'petrecere,populară' }))).toBe(true);
+    expect(radio.isFolk(st({ name: 'Super FM', tags: 'manele,petrecere,populară' }))).toBe(false);
+    expect(radio.isFolk(st({ name: 'Everything', tags: 'a,b,c,d,e,f,g,h,folclor' }))).toBe(false);
+  });
+  test('buildList: style codes (s) are listed for MANELE; a folk-only station is hidden (h) from the plain list; plain manele carry none', async () => {
+    const data = await run([st({ name: 'Ade FM', tags: 'hip-hop,manele,rap,trap' }), st({ name: 'Radio Folclor', tags: 'folclor,folk,petrecere,populară' }), st({ name: 'Antena Satelor', tags: 'muzică populară,radio public' }), st({ name: 'Plain Manele', tags: 'manele,petrecere' })]);
+    const byName = Object.fromEntries(manele(data).map(i => [i.n, i]));
+    expect(byName['Ade FM'].s).toContain('trap');
+    expect(byName['Radio Folclor'].s).toContain('folk'); expect(byName['Radio Folclor'].h).toBeUndefined();   // has petrecere: also a normal manele station
+    expect(byName['Antena Satelor'].s).toContain('folk'); expect(byName['Antena Satelor'].h).toBe(1);          // folk only
+    expect(byName['Plain Manele'].s).toBeUndefined();
+  });
+  test('style codes exist only in MANELE: the same station in another category carries none', async () => {
+    const data = await run([st({ name: 'Club Pop', tags: 'club,pop' })]);
+    for (const c of data.cats) for (const i of c.items) expect(i.s).toBeUndefined();
+  });
+});
