@@ -12,11 +12,11 @@
   var LIST_TTL = 30 * 60 * 1000, BAD_TTL = 24 * 3600 * 1000, ECO_KBPS = 96, MAX_FAV = 60, MAX_RECENT = 5;
   var TEXT = {
     de: { pick: 'Sender wählen', search: 'Suchen…', loading: 'Lädt…', none: 'Keine Sender gefunden.', fail: 'Radio-Liste nicht erreichbar.', broken: 'Sender nicht erreichbar – nächster…', allbroken: 'Kein Sender in dieser Kategorie erreichbar.', reconnect: 'Verbindet neu…', offline: 'Offline – wartet auf Netz', error: 'Fehler',
-          play: 'Radio abspielen', pause: 'Radio pausieren', stations: 'Senderliste', volume: 'Lautstärke', prev: 'Vorheriger Sender', next: 'Nächster Sender', dice: 'Zufälliger Sender', fav: 'Favoriten', recent: 'Zuletzt gehört', noFav: 'Noch keine Favoriten – tippe ☆ bei einem Sender.', noRecent: 'Noch nichts gehört.', sleep: 'Einschlaf-Timer', eco: 'Eco ≤96 kbps', addFav: 'Zu Favoriten', delFav: 'Aus Favoriten', sleepDone: 'Gute Nacht – Radio aus', sub: { all: 'Alle', old: 'Alt', new: 'Neu', trap: 'Trap / Techno', etno: 'Ethno', folk: 'Volksmusik' }, subLabel: 'Stil' },
+          play: 'Radio abspielen', pause: 'Radio pausieren', stations: 'Senderliste', volume: 'Lautstärke', prev: 'Vorheriger Sender', next: 'Nächster Sender', dice: 'Zufälliger Sender', fav: 'Favoriten', recent: 'Zuletzt gehört', noFav: 'Noch keine Favoriten – tippe ☆ bei einem Sender.', noRecent: 'Noch nichts gehört.', sleep: 'Einschlaf-Timer', eco: 'Eco ≤96 kbps', addFav: 'Zu Favoriten', delFav: 'Aus Favoriten', sleepDone: 'Gute Nacht – Radio aus', sub: { all: 'Alle', old: 'Alt', new: 'Neu', trap: 'Trap / Techno' }, subLabel: 'Stil' },
     ro: { pick: 'Alege o stație', search: 'Caută…', loading: 'Se încarcă…', none: 'Nicio stație găsită.', fail: 'Lista de radio nu e disponibilă.', broken: 'Stația nu răspunde – trec la următoarea…', allbroken: 'Nicio stație din această categorie nu răspunde.', reconnect: 'Se reconectează…', offline: 'Offline – aștept rețeaua', error: 'Eroare',
-          play: 'Pornește radioul', pause: 'Oprește radioul', stations: 'Lista de stații', volume: 'Volum', prev: 'Stația anterioară', next: 'Stația următoare', dice: 'Stație la întâmplare', fav: 'Favorite', recent: 'Ascultate recent', noFav: 'Încă nu ai favorite – atinge ☆ la o stație.', noRecent: 'Încă n-ai ascultat nimic.', sleep: 'Cronometru de somn', eco: 'Eco ≤96 kbps', addFav: 'Adaugă la favorite', delFav: 'Scoate din favorite', sleepDone: 'Noapte bună – radio oprit', sub: { all: 'Toate', old: 'Vechi', new: 'Noi', trap: 'Trapanele / Tehno', etno: 'Etno / Lăutărești', folk: 'Folclor' }, subLabel: 'Stil' },
+          play: 'Pornește radioul', pause: 'Oprește radioul', stations: 'Lista de stații', volume: 'Volum', prev: 'Stația anterioară', next: 'Stația următoare', dice: 'Stație la întâmplare', fav: 'Favorite', recent: 'Ascultate recent', noFav: 'Încă nu ai favorite – atinge ☆ la o stație.', noRecent: 'Încă n-ai ascultat nimic.', sleep: 'Cronometru de somn', eco: 'Eco ≤96 kbps', addFav: 'Adaugă la favorite', delFav: 'Scoate din favorite', sleepDone: 'Noapte bună – radio oprit', sub: { all: 'Toate', old: 'Vechi', new: 'Noi', trap: 'Trapanele / Tehno' }, subLabel: 'Stil' },
     en: { pick: 'Pick a station', search: 'Search…', loading: 'Loading…', none: 'No stations found.', fail: 'Radio list unavailable.', broken: 'Station not reachable – trying the next one…', allbroken: 'No station in this category is reachable.', reconnect: 'Reconnecting…', offline: 'Offline – waiting for network', error: 'Error',
-          play: 'Play radio', pause: 'Pause radio', stations: 'Station list', volume: 'Volume', prev: 'Previous station', next: 'Next station', dice: 'Random station', fav: 'Favorites', recent: 'Recently played', noFav: 'No favorites yet – tap ☆ on a station.', noRecent: 'Nothing played yet.', sleep: 'Sleep timer', eco: 'Eco ≤96 kbps', addFav: 'Add to favorites', delFav: 'Remove from favorites', sleepDone: 'Good night – radio off', sub: { all: 'All', old: 'Old school', new: 'New', trap: 'Trap / Techno', etno: 'Ethno', folk: 'Folk' }, subLabel: 'Style' }
+          play: 'Play radio', pause: 'Pause radio', stations: 'Station list', volume: 'Volume', prev: 'Previous station', next: 'Next station', dice: 'Random station', fav: 'Favorites', recent: 'Recently played', noFav: 'No favorites yet – tap ☆ on a station.', noRecent: 'Nothing played yet.', sleep: 'Sleep timer', eco: 'Eco ≤96 kbps', addFav: 'Add to favorites', delFav: 'Remove from favorites', sleepDone: 'Good night – radio off', sub: { all: 'All', old: 'Old school', new: 'New', trap: 'Trap / Techno' }, subLabel: 'Style' }
   };
   var L = function () { var l = typeof lang === 'string' ? lang : ''; if (!TEXT[l]) { try { l = localStorage.getItem('lxaLang') || ''; } catch (e) { l = ''; } } return TEXT[l] || TEXT.de; };
   var store = {
@@ -31,7 +31,7 @@
   var sleepTimer = 0, sleepTick = 0, sleepEnd = 0, lastDir = 1;   // lastDir: a dead station is skipped in the direction the listener was going (⏮ keeps going back)
   var saved = store.get(KEY, {}); if (!saved || typeof saved !== 'object') saved = {};
   var eco = saved.eco === true, sub = typeof saved.sub === 'string' ? saved.sub : 'all';   // sub: style filter inside MANELE (all | trap | old | new | etno | folk)
-  var STYLE_ICON = { trap: '⚡', old: '🕰', 'new': '✨', etno: '🎻', folk: '🪕' }, STYLE_ORDER = ['trap', 'old', 'new', 'etno', 'folk'];
+  var STYLE_ICON = { trap: '⚡', old: '🕰', 'new': '✨' }, STYLE_ORDER = ['trap', 'old', 'new'];   // folk / ethno stations are listed last by the server and have no filter
   if (saved.cat) catId = saved.cat;
   if (typeof saved.vol === 'number') volEl.value = String(Math.max(0, Math.min(100, saved.vol)));
   ecoEl.checked = eco;
@@ -41,7 +41,7 @@
     if (!(i && safeUrl(i.u) && typeof i.n === 'string')) return null;
     var o = { n: i.n.slice(0, 60), u: i.u, c: String(i.c || ''), b: Number(i.b) || 0, cc: String(i.cc || '').slice(0, 2) };
     if (Array.isArray(i.s)) { var st = i.s.filter(function (x) { return typeof x === 'string' && STYLE_ICON[x]; }).slice(0, 5); if (st.length) o.s = st; }
-    if (i.h) o.h = 1;
+    if (i.top) o.top = 1;
     return o;
   };
   var persist = function () { var it = currentItem(); store.set(KEY, { cat: catId, url: it ? it.u : saved.url, name: it ? it.n : saved.name, vol: Number(volEl.value), eco: eco, sub: sub }); };
@@ -60,8 +60,8 @@
   // ---- lists: real categories (from the server) + the two device lists; eco keeps stations up to 96 kbps (unless that would leave almost nothing)
   var ecoFilter = function (items) { var small = items.filter(function (i) { return !i.b || i.b <= ECO_KBPS; }); return small.length >= 3 ? small : items; };
   function catRaw(id) { var c = data && data.cats.filter(function (x) { return x.id === id; })[0]; return c ? (eco ? { id: c.id, emoji: c.emoji, label: c.label, items: ecoFilter(c.items) } : c) : null; }
-  // MANELE: 'all' hides the folk-only stations (h), a style shows only the stations that carry it
-  var styleFilter = function (items) { return sub === 'all' ? items.filter(function (i) { return !i.h; }) : items.filter(function (i) { return i.s && i.s.indexOf(sub) !== -1; }); };
+  // MANELE: 'all' lists everything (the server puts trap / techno first and folk / ethno last), a style shows only the stations that carry it
+  var styleFilter = function (items) { return sub === 'all' ? items : items.filter(function (i) { return i.s && i.s.indexOf(sub) !== -1; }); };
   function cat(id) {
     if (id === 'fav') return { id: 'fav', items: favs() };
     if (id === 'recent') return { id: 'recent', items: recents() };
@@ -132,7 +132,7 @@
   function renderSub() {
     var show = !!data && view === 'cat' && catId === 'manele' && !searchEl.value.trim(); subEl.hidden = !show; if (!show) return;
     var c = catRaw('manele'); if (!c) { subEl.hidden = true; return; }
-    var counts = {}, plain = c.items.filter(function (i) { return !i.h; }).length; c.items.forEach(function (i) { (i.s || []).forEach(function (s) { counts[s] = (counts[s] || 0) + 1; }); });
+    var counts = {}, plain = c.items.length; c.items.forEach(function (i) { (i.s || []).forEach(function (s) { counts[s] = (counts[s] || 0) + 1; }); });
     var keys = STYLE_ORDER.filter(function (k) { return counts[k] >= 2; }); if (sub !== 'all' && keys.indexOf(sub) === -1) sub = 'all';
     subEl.setAttribute('aria-label', L().subLabel); subEl.textContent = '';
     ['all'].concat(keys).forEach(function (k) {
@@ -157,7 +157,7 @@
       var on = now && now.u === r.it.u; if (on) { b.classList.add('on'); b.setAttribute('aria-current', 'true'); }
       if (badMap[r.it.u]) b.classList.add('bad');
       var name = document.createElement('span'); name.className = 'radio-st-name';
-      if (view === 'cat' && !q && r.i < 3 && r.it.cc === 'RO') { var top = document.createElement('span'); top.className = 'radio-top'; top.textContent = '🔥'; top.setAttribute('aria-hidden', 'true'); name.appendChild(top); }   // the flame sits INSIDE the name, so the row layout (name left, quality right) stays the same
+      if (view === 'cat' && !q && r.it.top) { var top = document.createElement('span'); top.className = 'radio-top'; top.textContent = '🔥'; top.setAttribute('aria-hidden', 'true'); name.appendChild(top); }   // 🔥 = one of the three most popular stations of the category (flag from the server); it sits INSIDE the name, so the row layout (name left, quality right) stays the same
       name.appendChild(document.createTextNode(r.it.n));
       var meta = document.createElement('small'); meta.textContent = (r.cid === 'manele' && r.it.s ? r.it.s.map(function (s) { return STYLE_ICON[s] || ''; }).join('') + ' ' : '') + (r.it.cc && r.it.cc !== 'RO' ? r.it.cc + ' · ' : '') + r.it.c + (r.it.b ? ' ' + r.it.b : '');
       b.appendChild(name); b.appendChild(meta);

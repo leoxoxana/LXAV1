@@ -223,14 +223,32 @@ describe('styles of manele', () => {
     expect(radio.isFolk(st({ name: 'Super Popular', tags: 'petrecere,populară' }))).toBe(true);
     expect(radio.isFolk(st({ name: 'Super FM', tags: 'manele,petrecere,populară' }))).toBe(false);
     expect(radio.isFolk(st({ name: 'Everything', tags: 'a,b,c,d,e,f,g,h,folclor' }))).toBe(false);
+    expect(radio.isFolk(st({ name: 'Radio Folclor', tags: 'folclor,folk,muzică de petrecere,muzică populară,muzică românească,petrecere,pop,populară,romanian' }))).toBe(true);   // many tags, but the name says folclor
   });
-  test('buildList: style codes (s) are listed for MANELE; a folk-only station is hidden (h) from the plain list; plain manele carry none', async () => {
+  test('buildList: style codes (s) are listed for MANELE and plain manele carry none; no station is hidden', async () => {
     const data = await run([st({ name: 'Ade FM', tags: 'hip-hop,manele,rap,trap' }), st({ name: 'Radio Folclor', tags: 'folclor,folk,petrecere,populară' }), st({ name: 'Antena Satelor', tags: 'muzică populară,radio public' }), st({ name: 'Plain Manele', tags: 'manele,petrecere' })]);
     const byName = Object.fromEntries(manele(data).map(i => [i.n, i]));
     expect(byName['Ade FM'].s).toContain('trap');
-    expect(byName['Radio Folclor'].s).toContain('folk'); expect(byName['Radio Folclor'].h).toBeUndefined();   // has petrecere: also a normal manele station
-    expect(byName['Antena Satelor'].s).toContain('folk'); expect(byName['Antena Satelor'].h).toBe(1);          // folk only
+    expect(byName['Radio Folclor'].s).toContain('folk');
+    expect(byName['Antena Satelor'].s).toContain('folk');   // folk-only stations that work are still listed (at the bottom)
     expect(byName['Plain Manele'].s).toBeUndefined();
+    expect(manele(data).some(i => i.h)).toBe(false);
+  });
+  test('TASTE ORDER: trap / techno first, new next, the rest, folk and ethno LAST; nothing removed; the quality order is kept inside a tier', async () => {
+    const data = await run([
+      st({ name: 'Folk A', tags: 'folclor,petrecere', clickcount: 9000 }), st({ name: 'Etno B', tags: 'etno,manele', clickcount: 8000 }),
+      st({ name: 'Plain C', tags: 'manele,petrecere', clickcount: 7000 }), st({ name: 'Plain D', tags: 'manele', clickcount: 6000 }),
+      st({ name: 'New E', tags: 'manele noi', clickcount: 5000 }), st({ name: 'Old F', tags: 'manele vechi', clickcount: 4000 }),
+      st({ name: 'Trap G', tags: 'manele,trap', clickcount: 100 }), st({ name: 'Club H', tags: 'manele,club', clickcount: 50 }),
+      st({ name: 'Club Etno I', tags: 'manele,club,etno', clickcount: 10 })
+    ]);
+    expect(manele(data).map(i => i.n)).toEqual(['Trap G', 'Club H', 'Club Etno I', 'New E', 'Plain C', 'Plain D', 'Old F', 'Folk A', 'Etno B']);
+  });
+  test('the 🔥 top flag marks the three best by quality, not the first three after the taste order', async () => {
+    const data = await run([st({ name: 'Plain Big', tags: 'manele', clickcount: 9000 }), st({ name: 'Plain Mid', tags: 'manele', clickcount: 8000 }), st({ name: 'Plain Two', tags: 'manele', clickcount: 7000 }), st({ name: 'Plain Four', tags: 'manele', clickcount: 6000 }), st({ name: 'Trap Tiny', tags: 'manele,trap', clickcount: 1 })]);
+    const list = manele(data);
+    expect(list[0].n).toBe('Trap Tiny');                                 // first by taste ...
+    expect(list.filter(i => i.top).map(i => i.n).sort()).toEqual(['Plain Big', 'Plain Mid', 'Plain Two']);   // ... but not "top"
   });
   test('style codes exist only in MANELE: the same station in another category carries none', async () => {
     const data = await run([st({ name: 'Club Pop', tags: 'club,pop' })]);

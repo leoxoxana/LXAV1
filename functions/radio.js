@@ -19,7 +19,7 @@ const BUILD_BUDGET_MS = 19000;                // the function may run 30 s (verc
 
 // not = stations that are about something else (news, talk, religion) never enter a music category
 const CATEGORIES = [
-  { id: 'manele', emoji: '🔥', label: 'MANELE', pin: /trapanel|\btrap\b|t[e]?hno|techno|\bclub\b|hip[ -]?hop|\bdj\b|remix|manele noi|manele vechi|folclor|folcloric/i, re: /manele|manea|trapanel|petrecere|lautaresc|lăutăresc|taraf|folclor|folcloric|muzic[aă] popular[aă]/i, queries: ['manele', 'petrecere', 'trapanele', 'lautareasca'], foreign: [] },
+  { id: 'manele', emoji: '🔥', label: 'MANELE', pin: /trapanel|\btrap\b|t[e]?hno|techno|\bclub\b|hip[ -]?hop|\bdj\b|remix|manele noi|manele vechi/i, re: /manele|manea|trapanel|petrecere|lautaresc|lăutăresc|taraf|folclor|folcloric|muzic[aă] popular[aă]/i, queries: ['manele', 'petrecere', 'trapanele', 'lautareasca'], foreign: [] },
   { id: 'rap', emoji: '🎤', label: 'RAP', re: /\brap\b|hip[ -]?hop|\btrap\b|urban|\br&b\b/i, queries: ['rap', 'hip hop', 'trap'], foreign: ['hip hop', 'rap'] },
   { id: 'house', emoji: '🪩', label: 'HOUSE', re: /\bhouse\b|deep house|progressive house/i, not: /tech[ -]?house/i, queries: ['house', 'deep house'], foreign: ['house', 'deep house'] },
   { id: 'techno', emoji: '⚡', label: 'TECHNO', re: /techno|minimal|tech[ -]?house|trance|\belectronic\b/i, queries: ['techno', 'minimal', 'trance', 'electronic'], foreign: ['techno', 'minimal'] },
@@ -36,13 +36,13 @@ const isHidden = station => { const name = String(station.name || '').toLowerCas
 // STYLES of manele (only the MANELE category carries them). The directory has no tag for "trapanele" / "tehno manele" (1 station says so), so styles are recognised from the tags + name signals that really exist:
 //  old = manele vechi / de aur / retro,  new = manele noi / hits,  trap = trap / techno / club / hip hop / dj / remix / edm / bass / electronic,  etno = etno / lautareasca / taraf / orient / balcan,
 //  folk = muzica populara / folclor (the tag "populara" alone is only a party tag on ~45 manele stations: it counts together with "popular" in the name).
-// A folk station without any manele / petrecere tag is hidden (h) in the plain MANELE list and only shown under the folk filter.
+// TASTE ORDER inside MANELE (owner's decision: nothing that works is deleted, what he likes goes first, what he does not like goes last):
+//   0 trap / techno manele (trapanele),  1 new manele,  2 everything else (party, old),  3 folk and ethno (last). Trap wins over folk / ethno (a club station that also has an ethno tag stays on top).
 const STYLE_RES = { old: /manele vechi|manele de aur|\bvechi\b|\bretro\b|nostalg|oldies|\b90s\b/i, new: /manele noi|\bhits?\b|hituri|\b20[12][0-9]\b/i, trap: /trapanel|\btrap\b|t[e]?hno|techno|\bclub\b|hip[ -]?hop|\bdj\b|remix|\bedm\b|\bbass\b|electronic/i, etno: /\betno\b|l[aă]utar|\btaraf\b|orient|balcan|damblagii/i };
 const FOLK_TAGS = ['folclor', 'muzică populară', 'muzica populara', 'folclor românesc', 'folclor romanesc', 'muzică folclorică', 'muzica folclorica'];
-const isFolk = station => { const tags = String(station.tags || '').toLowerCase().split(',').map(t => t.trim()).filter(Boolean); if (tags.length > 8) return false;   // multi-genre stations are not folk stations
+const isFolk = station => { const tags = String(station.tags || '').toLowerCase().split(',').map(t => t.trim()).filter(Boolean); if (tags.length > 8 && !/folclor|folcloric/i.test(station.name || '')) return false;   // multi-genre stations are not folk stations (unless the name says folclor)
   return tags.some(t => FOLK_TAGS.includes(t)) || /folclor|folcloric/i.test(station.name || '') || (tags.some(t => t === 'populară' || t === 'populara') && /\bpopular\b/i.test(station.name || '')); };
 const styleOf = station => { const text = `${station.tags || ''} ${station.name || ''}`, out = Object.keys(STYLE_RES).filter(key => STYLE_RES[key].test(text)); if (isFolk(station)) out.push('folk'); return out; };
-const hasManeleTag = station => /manele|manea|petrecere|trapanel/i.test(station.tags || '') || /manele/i.test(station.name || '');
 const cleanName = value => String(value || '').replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 48);
 const isHttps = url => /^https:\/\/[^\s]+$/i.test(String(url || ''));
 const codecOf = station => { const c = String(station.codec || '').toUpperCase(); return c.startsWith('AAC') ? 'AAC' : c === 'MP3' ? 'MP3' : ''; };
@@ -115,9 +115,10 @@ async function defaultFetchForeign(category) {
   return lists.flat();
 }
 
+const maneleTier = item => { const s = item.s || []; if (s.includes('trap')) return 0; if (s.includes('folk') || s.includes('etno')) return 3; if (s.includes('new')) return 1; return 2; };
 const publicItem = (station, foreign, categoryId) => {
   const item = { n: cleanName(station.name), u: streamUrl(station), c: codecOf(station), b: Math.round(Number(station.bitrate) || 0), cc: foreign ? String(station.countrycode || '').toUpperCase().slice(0, 2) : 'RO' };
-  if (categoryId === 'manele' && !foreign) { const styles = styleOf(station); if (styles.length) item.s = styles; if (styles.includes('folk') && !hasManeleTag(station)) item.h = 1; }
+  if (categoryId === 'manele' && !foreign) { const styles = styleOf(station); if (styles.length) item.s = styles; }
   return item;
 };
 
@@ -164,6 +165,9 @@ async function buildList(deps = {}) {
       let added = 0;
       for (const station of candidates) { if (romanian + added >= MIN_PER_CATEGORY || added >= MAX_FOREIGN) break; if (probed.get(streamUrl(station)) === true && add(station, true)) added++; }
     }
+    // the three best Romanian stations by quality (listeners / votes / bitrate) are flagged BEFORE the taste order is applied: the 🔥 means popular, not "first in the list"
+    items.filter(item => item.cc === 'RO').slice(0, 3).forEach(item => { item.top = 1; });
+    if (category.id === 'manele') items.sort((a, b) => maneleTier(a) - maneleTier(b));   // stable: inside a tier the quality order stays
     result.push({ id: category.id, emoji: category.emoji, label: category.label, items });
   }
   return { updatedAt: now(), cats: result };
@@ -201,5 +205,5 @@ exports.handler = async event => {
     return reply({ error: 'Radio list temporarily unavailable.' }, 503, { 'cache-control': 'no-store' });
   }
 };
-exports.buildList = buildList; exports.getList = getList; exports.styleOf = styleOf; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
+exports.buildList = buildList; exports.getList = getList; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
 exports.__resetMemory = () => { memory = null; building = null; };
