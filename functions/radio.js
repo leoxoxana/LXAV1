@@ -388,7 +388,7 @@ async function servingState(storage, now = Date.now()) {
   const before = servingCache && servingCache.state;
   const read = async (fn, old) => { try { return storage && storage[fn] ? ((await storage[fn]()) || {}) : {}; } catch (error) { return old || {}; } };
   const raw = { hidden: await read('getRadioHidden', before && before.raw.hidden), moves: await read('getRadioMoves', before && before.raw.moves), favs: await read('getRadioFavCounts', before && before.raw.favs), customs: await read('getRadioCustoms', before && before.raw.customs) };
-  const state = { raw, hidden: new Set(Object.keys(raw.hidden)), moves: new Map(Object.entries(raw.moves).filter(([, v]) => v && MOVE_TARGETS.includes(v.cat)).map(([k, v]) => [k, v.cat])), favs: new Map(Object.entries(raw.favs).map(([k, v]) => [k, Number(v) || 0])), customs: Object.entries(raw.customs).filter(([, v]) => v && v.u && CUSTOM_TARGETS.includes(v.cat)).map(([key, v]) => ({ key, u: String(v.u), n: String(v.n || '').slice(0, 48), c: String(v.c || ''), b: Number(v.b) || 0, cat: v.cat, at: Number(v.at) || 0 })).sort((a, b) => b.at - a.at) };
+  const state = { raw, hidden: new Set(Object.keys(raw.hidden)), moves: new Map(Object.entries(raw.moves).filter(([, v]) => v && MOVE_TARGETS.includes(v.cat)).map(([k, v]) => [k, v.cat])), favs: new Map(Object.entries(raw.favs).map(([k, v]) => [k, Number(v) || 0])), customs: Object.entries(raw.customs).filter(([, v]) => v && v.u && CUSTOM_TARGETS.includes(v.cat)).map(([key, v]) => ({ key, u: String(v.u), n: String(v.n || '').slice(0, 48), c: String(v.c || ''), b: Number(v.b) || 0, cat: v.cat, at: Number(v.at) || 0, f: Number(v.f) || 0, fs: String(v.fs || ''), cc: String(v.cc || '').slice(0, 2) })).sort((a, b) => b.at - a.at) };
   servingCache = { at: now, state }; return state;
 }
 const stripMarks = item => { const copy = { ...item }; delete copy.top; delete copy.s; delete copy.m; return copy; };
@@ -439,6 +439,7 @@ async function handleFav(body, storage) {
 // Duplicates are decided here, on the canonical address (http/https, www., port 80/443, trailing slash, Shoutcast "/;", tracking parameters are the same stream), inside one Firebase transaction.
 let validator = validate.validateStream, accountVerifier = null;
 exports.__setValidator = fn => { validator = fn || validate.validateStream; };
+exports.runValidator = (url, opts) => validator(url, opts);   // the one validation entry point (admin recommendation checks use it too)
 exports.__setAccountVerifier = fn => { accountVerifier = fn || null; };
 const blockedWhy = raw => { try { const u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : 'https://' + raw); return u.protocol === 'http:' || u.protocol === 'https:' ? 'blocked' : 'bad-url'; } catch (error) { return 'bad-url'; } };
 // canonical address -> where the station is already: the public list or the approved stations of players
@@ -495,6 +496,38 @@ async function healthSweep(storage, { max = 8, budgetMs = 25000, durationMs = 30
   await Promise.all([worker(), worker(), worker()]);
   return results;
 }
+// RECOMMEND: a LOGGED-IN player recommends a station he found by frequency. FREQUENCY != STREAM != APPROVAL != REPORT: this is its own record (Firebase radioRecommend/<key of the canonical stream>), always PENDING, and nothing here can publish.
+// The client sends only the stream address of a result the SERVER returned earlier (and an optional short message): name, frequency, country, city, source and id are read from the server's own record of that result,
+// the player is the verified session (never a body field), the verdict is the server's own stream check. Several players recommending the same stream share ONE record (players{}), a second tap of the same player changes nothing.
+const REC_LIMIT = 12;
+async function handleRecommend(body, event, storage) {
+  const none = { 'cache-control': 'no-store' }, headers = (event && event.headers) || {};
+  if (!storage || !storage.updateRadioRecommend) return reply({ error: 'unavailable' }, 503, none);
+  let by = null; try { const verify = accountVerifier || require('./lxa-account').verifyPlayer; by = body.id !== undefined && body.token && verify ? await verify(body.id, String(body.token)) : null; } catch (error) { by = null; }
+  if (!by) return reply({ ok: false, state: 'LOGIN' }, 401, none);
+  const input = custom.cleanStreamUrl(String(body.u || '').trim()); if (!input) return reply({ ok: false, state: 'INVALID' }, 400, none);
+  const canon = validate.canonicalStream(input), found = getBrowser().lookup(canon);
+  if (!found) return reply({ ok: false, state: 'UNKNOWN' }, 404, none);   // only a result the server itself returned can be recommended
+  if (!reports.allow('rec' + by.id, Date.now(), REC_LIMIT)) return reply({ ok: false, state: 'LIMIT' }, 429, none);
+  try {
+    const key = reports.radioKey(canon), known = await knownIndex(storage), rejected = (await storage.getRadioRejected()) || {};
+    if (known.has(canon)) return reply({ ok: true, state: known.get(canon).where === 'approved' ? 'APPROVED' : 'EXISTS' }, 200, none);
+    if (rejected[key]) return reply({ ok: true, state: 'REJECTED' }, 200, none);
+    const message = String(body.msg || '').replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 140), now = Date.now();
+    const verdict = await validator(found.u, { durationMs: validate.READ_MS }), vstate = validate.stateOf(verdict);
+    let already = false, count = 0;
+    await storage.updateRadioRecommend(key, current => {
+      const node = current && current.st ? { ...current, players: { ...(current.players || {}) } } : { st: { n: found.n, u: found.u, canon, f: found.f, fs: found.fs, cc: found.cc, city: found.city, src: found.src, sid: found.sid, c: found.c, b: found.b }, players: {}, status: 'PENDING', first: now };
+      if (node.status && node.status !== 'PENDING') { already = true; count = Object.keys(node.players).length; return current; }
+      if (node.players[String(by.id)]) { already = true; count = Object.keys(node.players).length; return current; }   // double tap / second try: nothing changes
+      node.players[String(by.id)] = { id: by.id, name: by.name, at: now, ...(message ? { msg: message } : {}) };
+      node.count = Object.keys(node.players).length; node.last = now; count = node.count;
+      if (!(node.v && node.v.ok && !verdict.ok)) { node.v = validate.compactVerdict(verdict); node.vstate = vstate; node.checkedAt = now; }   // a VALID verdict is never replaced by a failed one
+      return node;
+    });
+    return reply({ ok: true, state: already ? 'ALREADY' : 'RECOMMENDED', vstate, count }, 200, none);
+  } catch (error) { return reply({ error: 'Not saved.' }, 503, none); }
+}
 // CHECK: validates ONE stream for the player (VALID / INVALID with the reason) and saves nothing: used before playing a station found by frequency
 async function handleCheck(body, event) {
   const raw = String(body.u || '').trim(), headers = (event && event.headers) || {}, who = String(headers['x-vercel-forwarded-for'] || headers['x-forwarded-for'] || 'anon').split(',')[0].trim();
@@ -509,6 +542,7 @@ async function handleReport(event, storage) {
   if (body && body.action === 'fav') return handleFav(body, storage);
   if (body && (body.action === 'submit' || body.action === 'suggest')) return handleSubmit(body, event, storage);
   if (body && body.action === 'check') return handleCheck(body, event);
+  if (body && body.action === 'recommend') return handleRecommend(body, event, storage);
   const headers = event.headers || {}, report = body && body.action === 'report' ? reports.cleanReport(body, headers['user-agent'] || headers['User-Agent']) : null;
   if (!report) return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' });
   if (!reports.allow(report.dev)) return reply({ error: 'Too many reports.' }, 429, { 'cache-control': 'no-store' });
@@ -524,12 +558,13 @@ async function handleReport(event, storage) {
 let browser = null;
 const getBrowser = () => browser || (browser = require('./radio-browse').create({ rb: radioBrowser, usable, toItem: station => publicItem(station, true, 'browse'), canonical: validate.canonicalStream }));
 exports.__setBrowser = b => { browser = b; };
-async function handleBrowse(query, event) {
+async function handleBrowse(query, event, storage) {
   const headers = (event && event.headers) || {}, who = String(headers['x-vercel-forwarded-for'] || headers['x-forwarded-for'] || 'anon').split(',')[0].trim(), br = require('./radio-browse'), cc = br.cleanCc(query.cc), kind = String(query.browse);
   if (!reports.allow('brw' + who, Date.now(), 40)) return reply({ error: 'limit' }, 429, { 'cache-control': 'no-store' });
   try {
     if (kind === 'countries') return reply({ countries: await getBrowser().countries(), mine: br.cleanCc(headers['x-vercel-ip-country']) }, 200, { 'cache-control': 'public, max-age=3600' });
-    const out = kind === 'freq' ? await getBrowser().search(cc, query.f) : kind === 'scan' ? await getBrowser().scan(cc, query.from, query.to) : { error: 'bad-request' };
+    const customs = (kind === 'freq' || kind === 'scan') ? (await servingState(storage).catch(() => ({ customs: [] }))).customs.filter(c => c.f) : [];
+    const out = kind === 'freq' ? await getBrowser().search(cc, query.f, customs) : kind === 'scan' ? await getBrowser().scan(cc, query.from, query.to, customs) : { error: 'bad-request' };
     return reply(out, out.error ? 400 : 200, { 'cache-control': 'public, max-age=300' });
   } catch (error) { return reply({ error: 'unavailable' }, 503, { 'cache-control': 'no-store' }); }
 }
@@ -539,7 +574,7 @@ exports.handler = async event => {
   let storage = null; try { storage = require('./firebase-storage'); } catch (error) { storage = null; }
   if (event.httpMethod === 'POST') return handleReport(event, storage);
   const query = event.queryStringParameters || {};
-  if (query.browse) return handleBrowse(query, event);
+  if (query.browse) return handleBrowse(query, event, storage);
   try {
     const { data, stale, rechecked } = await getList({ refresh: String(query.refresh || '') === '1', recheck: String(query.recheck || '') === '1', storage });
     const state = await servingState(storage);

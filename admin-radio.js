@@ -31,13 +31,13 @@
   var esc = function (v) { return String(v === undefined || v === null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var MAX_ROWS = 80;
   var tab = 'reports', stations = null, categories = [], filter = { q: '', cat: 'all' };
-  var sugRows = null, approved = [], rejectedRows = [], targets = [], suggestCount = 0;   // the 📨 tab: links the players offered, stations the owner approved, the 12 target categories
+  var sugRows = null, approved = [], rejectedRows = [], targets = [], suggestCount = 0, recRows = null, recCount = 0;   // the 📨 tab: links the players offered, stations the owner approved, the 12 target categories
   var EMOJI12 = { global: '🌍', top: '⭐' };
   var cat = function (id) { for (var i = 0; i < categories.length; i++) if (categories[i].id === id) return categories[i]; return null; };
   var emojiOf = function (id) { var c = cat(id); return c ? c.emoji : id; };
 
   function tabsHtml() {
-    return '<div class="radio-admin-tabs" role="tablist">' + [['reports', L().tabReports], ['stations', L().tabStations], ['suggest', L().tabSuggest + (suggestCount ? ' ' + suggestCount : '')]].map(function (t) {
+    return '<div class="radio-admin-tabs" role="tablist">' + [['reports', L().tabReports], ['stations', L().tabStations], ['suggest', L().tabSuggest + (suggestCount ? ' ' + suggestCount : '')], ['recs', L().tabRecs + (recCount ? ' ' + recCount : '')]].map(function (t) {
       return '<button type="button" role="tab" class="radio-admin-tab' + (tab === t[0] ? ' on' : '') + '" aria-selected="' + (tab === t[0]) + '" data-radio-tab="' + t[0] + '">' + esc(t[1]) + '</button>';
     }).join('') + '</div>';
   }
@@ -59,7 +59,7 @@
   function loadStations() { return request('stations').then(function (r) { wake(r); stations = r.stations || []; categories = r.categories || categories; }); }
   function loadSuggest() { return request('suggestions').then(function (r) { sugRows = r.suggestions || []; approved = r.approved || []; rejectedRows = r.rejected || []; targets = r.targets || []; suggestCount = sugRows.filter(function (s) { return s.status !== 'INVALID'; }).length; }); }
   function reload(message) {   // the reports view re-reads its list; the station manager and the 📨 tab re-read their own
-    return request('list').then(function (r) { wake(r); lxaRadioCache = r; suggestCount = Number(r.suggestCount) || 0; if (tab === 'stations') return loadStations().then(function () { renderAccountPanel('radio-admin', message || ''); }); if (tab === 'suggest') return loadSuggest().then(function () { renderAccountPanel('radio-admin', message || ''); }); renderAccountPanel('radio-admin', message || ''); });
+    return request('list').then(function (r) { wake(r); lxaRadioCache = r; suggestCount = Number(r.suggestCount) || 0; if (tab === 'stations') return loadStations().then(function () { renderAccountPanel('radio-admin', message || ''); }); if (tab === 'suggest') return loadSuggest().then(function () { renderAccountPanel('radio-admin', message || ''); }); if (tab === 'recs') return loadRecs().then(function () { renderAccountPanel('radio-admin', message || ''); }); renderAccountPanel('radio-admin', message || ''); });
   }
   // ---- 📨 the links the players offered: one row per link, 🔍 test, ✅ approve into one of the 12 categories (emoji chips), ❌ reject
   var ago = function (ts) { if (!ts) return ''; var h = Math.round((Date.now() - ts) / 3600000); return h < 1 ? '<1h' : h < 48 ? h + 'h' : Math.round(h / 24) + 'd'; };
@@ -116,6 +116,35 @@
   function sugChipsHtml(key) {
     return targets.map(function (id) { var c = cat(id); return '<button type="button" class="radio-chip" data-sug-cat="' + esc(id) + '" data-key="' + esc(key) + '" title="' + esc(c ? c.label : id.toUpperCase()) + '" aria-label="' + esc(L().sugApprove + ': ' + (c ? c.label : id.toUpperCase())) + '">' + esc(targetEmoji(id)) + '</button>'; }).join('');
   }
+  // ---- ⭐ RECOMMENDATIONS: what players recommended from the frequency search. One row per STATION (several players share it). The data is the server's own record, never the client's.
+  function loadRecs() { return request('recs').then(function (r) { recRows = r.recs || []; targets = r.targets || targets; recCount = recRows.filter(function (x) { return x.status === 'PENDING'; }).length; }); }
+  function recRowHtml(x) {
+    var v = x.v || {}, who = x.players.map(function (p) { return '#' + p.id + (p.name ? ' ' + p.name : ''); }).join(', '), msgs = x.players.filter(function (p) { return p.msg; }).map(function (p) { return p.msg; }).join(' · ');
+    var rows = [], add = function (label, val) { if (val !== undefined && val !== null && val !== '' && val !== 0) rows.push('<div><span>' + esc(label) + '</span><b>' + esc(val) + '</b></div>'); };
+    add(L().recFreq, x.f ? x.f + ' MHz (' + x.fs + ')' : ''); add(L().recCountry, [x.cc, x.city].filter(Boolean).join(' · ')); add(L().recSource, x.src + (x.sid ? ' / ' + x.sid : '')); add(L().dNorm, x.u); add(L().dCanon, x.canon);
+    add(L().recPlayers, who); add(L().recWhen, fmt(x.first)); add(L().dChecked, fmt(x.checkedAt)); add(L().recMsg, msgs); add(L().dDup, x.dup ? dupLabel(x.dup) : ''); add(L().dAudio, v.ok === true ? L().yes : v.ok === false ? L().no : '?');
+    add(L().dCodec, [v.codec, v.vbr ? 'VBR' : ''].filter(Boolean).join(' ')); add(L().dBitrate, v.bitrate ? v.bitrate + ' kbps' : ''); add(L().dRate, v.sampleRate ? v.sampleRate + ' Hz' : ''); add(L().dChan, v.channels); add(L().dStable, v.stable === true ? L().yes : v.stable === false ? L().no : '');
+    add(L().dStalls, v.stalls !== undefined ? v.stalls : ''); add(L().dLevel, L().notMeasured); if (v.ok === false) add(L().dWhy, whyLabel(v.why));
+    var pending = x.status === 'PENDING';
+    return '<div class="player-row radio-sug" data-key="' + esc(x.key) + '"><span class="player-row-info"><b><input type="text" class="radio-sug-name" maxlength="48" value="' + esc(x.n) + '" aria-label="Name"> ' + badge(x.status) + (x.vstate ? ' ' + badge(x.vstate) : '') + (x.dup ? ' <span class="radio-badge">⚠️ ' + esc(dupLabel(x.dup)) + '</span>' : '') + '</b>' +
+      '<small>' + (x.f ? esc(x.f) + ' MHz · ' : '') + esc(x.cc) + ' · ' + esc(x.count) + ' 👥 ' + esc(who.length > 60 ? who.slice(0, 60) + '…' : who) + '</small>' +
+      '<details class="radio-sug-more"><summary>' + esc(L().dMore) + '</summary><div class="radio-sug-grid">' + rows.join('') + '</div></details><small class="radio-test-out" data-rec-out="' + esc(x.key) + '"></small></span>' +
+      '<span class="radio-station-actions">' + btn('', 'data-rec-test', x.key, L().testAgain, '🔄') + btn('', 'data-sug-play', x.key, L().play, '▶', ' data-url="' + esc(x.u) + '"') + (pending ? btn('radio-show', 'data-rec-ok', x.key, L().recApprove, '✅', ' aria-expanded="false"') + btn('', 'data-rec-reject', x.key, L().sugReject, '❌') : '') + '</span><div class="radio-move-panel" data-rec-panel="' + esc(x.key) + '" hidden></div></div>';
+  }
+  function recChipsHtml(key, f) {
+    return '<input type="text" class="radio-rec-f" inputmode="decimal" maxlength="7" value="' + esc(f || '') + '" placeholder="MHz" aria-label="' + esc(L().recFreq) + '"> ' + targets.map(function (id) { var c = cat(id); return '<button type="button" class="radio-chip" data-rec-cat="' + esc(id) + '" data-key="' + esc(key) + '" title="' + esc(c ? c.label : id.toUpperCase()) + '" aria-label="' + esc(L().recApprove + ': ' + (c ? c.label : id.toUpperCase())) + '">' + esc(targetEmoji(id)) + '</button>'; }).join('');
+  }
+  function recsHtml() {
+    var rows = recRows || [], by = function (st) { return rows.filter(function (x) { return x.status === st; }); };
+    return '<p class="account-hint">' + esc(L().recHint) + '</p>' + (rows.length ? '' : '<p class="account-notice">' + esc(L().recNone) + '</p>') +
+      section(L().secPending, by('PENDING').length, by('PENDING').map(recRowHtml).join('')) + section(L().secApproved, by('APPROVED').length, by('APPROVED').map(recRowHtml).join('')) + section(L().secRejected, by('REJECTED').length, by('REJECTED').map(recRowHtml).join(''));
+  }
+  var T3 = {
+    de: { tabRecs: '⭐ Empfehlungen', recHint: 'Spieler empfehlen Sender aus der Frequenzsuche. Daten kommen vom SERVER. Freigabe: Stream wird frisch geprüft, Duplikate geprüft, du wählst eine BESTEHENDE Kategorie; die Frequenz, die du einträgst, gilt als vom Admin bestätigt.', recNone: 'Keine Empfehlungen.', recFreq: 'Frequenz', recCountry: 'Land / Ort', recSource: 'Quelle', recPlayers: 'Empfohlen von', recWhen: 'Zeit', recMsg: 'Nachricht', recApprove: 'Freigeben & hinzufügen', secRejected: 'ABGELEHNT' },
+    ro: { tabRecs: '⭐ Recomandări', recHint: 'Jucătorii recomandă posturi găsite după frecvență. Datele vin de pe SERVER. La aprobare: stream verificat din nou, duplicate verificate, alegi o categorie EXISTENTĂ; frecvența scrisă de tine devine confirmată de admin.', recNone: 'Nicio recomandare.', recFreq: 'Frecvență', recCountry: 'Țară / oraș', recSource: 'Sursă', recPlayers: 'Recomandat de', recWhen: 'Când', recMsg: 'Mesaj', recApprove: 'Aprobă și adaugă', secRejected: 'RESPINSE' },
+    en: { tabRecs: '⭐ Recommendations', recHint: 'Players recommend stations found by frequency. Data comes from the SERVER. On approval: fresh stream check, duplicate check, you pick an EXISTING category; the frequency you type counts as admin-verified.', recNone: 'No recommendations.', recFreq: 'Frequency', recCountry: 'Country / city', recSource: 'Source', recPlayers: 'Recommended by', recWhen: 'When', recMsg: 'Message', recApprove: 'Approve & add', secRejected: 'REJECTED' }
+  };
+  ['de', 'ro', 'en'].forEach(function (k) { Object.keys(T3[k]).forEach(function (key) { TEXT[k][key] = T3[k][key]; }); });
   var failure = function (err) { renderAccountPanel('radio-admin', (err && err.message) || L().failed); };
 
   function rowHtml(s) {
@@ -150,7 +179,7 @@
     panel.addEventListener('click', function (e) {
       var t = e.target; if (!t || !t.closest) return;
       var tabBtn = t.closest('[data-radio-tab]');
-      if (tabBtn) { stopTest(); tab = tabBtn.dataset.radioTab; var loader = tab === 'stations' ? loadStations : tab === 'suggest' ? loadSuggest : null; if (loader) loader().then(function () { renderAccountPanel('radio-admin'); }).catch(function (err) { tab = 'reports'; failure(err); }); else renderAccountPanel('radio-admin'); return; }
+      if (tabBtn) { stopTest(); tab = tabBtn.dataset.radioTab; var loader = tab === 'stations' ? loadStations : tab === 'suggest' ? loadSuggest : tab === 'recs' ? loadRecs : null; if (loader) loader().then(function () { renderAccountPanel('radio-admin'); }).catch(function (err) { tab = 'reports'; failure(err); }); else renderAccountPanel('radio-admin'); return; }
       var sugTest = t.closest('[data-sug-test]'), cuTest = t.closest('[data-custom-check]'), checkAll = t.closest('[data-customs-check]');
       if (sugTest || cuTest || checkAll) {   // 🔄 the SERVER checks the stream again and stores the new verdict; the tab is redrawn from the stored data
         var which = sugTest ? 'sug-test' : cuTest ? 'custom-check' : 'customs-check', trig = sugTest || cuTest || checkAll, k = trig.dataset.sugTest || trig.dataset.customCheck || '';
@@ -159,6 +188,14 @@
         return;
       }
       var play = t.closest('[data-sug-play]'); if (play) { playTest(play); return; }
+      var recTest = t.closest('[data-rec-test]');
+      if (recTest) { var rk = recTest.dataset.recTest, rout = panel.querySelector('[data-rec-out="' + rk + '"]'); if (rout) rout.textContent = '⏳'; recTest.disabled = true; request('rec-test', { key: rk }).then(function () { return loadRecs(); }).then(function () { stopTest(); renderAccountPanel('radio-admin'); }).catch(function (err) { recTest.disabled = false; if (rout) rout.textContent = '❌ ' + ((err && err.message) || ''); }); return; }
+      var recOk = t.closest('[data-rec-ok]');
+      if (recOk) { var rrow = recOk.closest('.player-row'), rbox = rrow && rrow.querySelector('.radio-move-panel'); if (!rbox) return; var ropen = rbox.hidden; panel.querySelectorAll('.radio-move-panel').forEach(function (p) { p.hidden = true; }); if (ropen) { var cur = (recRows || []).filter(function (x) { return x.key === recOk.dataset.recOk; })[0]; rbox.innerHTML = recChipsHtml(recOk.dataset.recOk, cur && cur.fs === 'ADMIN_VERIFIED' ? cur.f : (cur && cur.f) || ''); rbox.hidden = false; } return; }
+      var recCat = t.closest('[data-rec-cat]');
+      if (recCat) { var rr = recCat.closest('.player-row'), rname = rr && rr.querySelector('.radio-sug-name'), rf = rr && rr.querySelector('.radio-rec-f'); recCat.disabled = true; request('rec-approve', { key: recCat.dataset.key, cat: recCat.dataset.recCat, name: rname ? rname.value : '', f: rf ? rf.value : '' }).then(function () { return reload(); }).catch(function (err) { recCat.disabled = false; failure(err); }); return; }
+      var recRej = t.closest('[data-rec-reject]');
+      if (recRej) { recRej.disabled = true; request('rec-reject', { key: recRej.dataset.recReject }).then(function () { return reload(); }).catch(function (err) { recRej.disabled = false; failure(err); }); return; }
       var sugOk = t.closest('[data-sug-ok]');
       if (sugOk) { var host = sugOk.closest('.player-row'), pbox = host && host.querySelector('.radio-move-panel'); if (!pbox) return; var opening = pbox.hidden; panel.querySelectorAll('.radio-move-panel').forEach(function (p) { p.hidden = true; }); if (opening) { pbox.innerHTML = sugChipsHtml(sugOk.dataset.sugOk); pbox.hidden = false; } return; }
       var sugCat = t.closest('[data-sug-cat]');
@@ -191,9 +228,10 @@
     bind(panel);
     var root = panel.querySelector('#radioStations'); if (root && stations) mountStations(root);
     var sug = panel.querySelector('#radioSuggest'); if (sug && sugRows) sug.innerHTML = suggestHtml();
+    var recs = panel.querySelector('#radioRecs'); if (recs && recRows) recs.innerHTML = recsHtml();
   }
-  function reset() { stopTest(); tab = 'reports'; stations = null; sugRows = null; filter = { q: '', cat: 'all' }; }
-  var holder = function () { return tab === 'stations' ? '<div id="radioStations"></div>' : tab === 'suggest' ? '<div id="radioSuggest"></div>' : ''; };
+  function reset() { stopTest(); tab = 'reports'; stations = null; sugRows = null; recRows = null; filter = { q: '', cat: 'all' }; }
+  var holder = function () { return tab === 'stations' ? '<div id="radioStations"></div>' : tab === 'suggest' ? '<div id="radioSuggest"></div>' : tab === 'recs' ? '<div id="radioRecs"></div>' : ''; };
 
   window.LXAAdminRadio = { holder: holder, setSuggestCount: function (n) { suggestCount = Number(n) || 0; }, wake: wake, tabsHtml: tabsHtml, toggleHtml: toggleHtml, panelHtml: panelHtml, afterRender: afterRender, reset: reset, tab: function () { return tab; }, setCategories: function (c) { if (c && c.length) categories = c; } };
 })();

@@ -1,6 +1,6 @@
 // RADIO HEALTH: strict two-client probe, periodic re-check, anonymous player reports, owner's hide list + admin actions.
 jest.mock('./functions/firebase-storage.js', () => {
-  let accounts = {}, cache = null, reports = {}, hidden = {}, moves = {}, favs = {}, suggest = {}, rejected = {}, customs = {}, suggestDay = { day: '', n: 0 }; const favDev = new Set();
+  let accounts = {}, cache = null, reports = {}, hidden = {}, moves = {}, favs = {}, suggest = {}, rejected = {}, customs = {}, suggestDay = { day: '', n: 0 }, recommend = {}; const favDev = new Set();
   const copy = v => (v === null || v === undefined ? v : JSON.parse(JSON.stringify(v)));
   return {
     getAccounts: async () => copy(accounts), saveAccounts: async n => { accounts = n; },
@@ -16,9 +16,10 @@ jest.mock('./functions/firebase-storage.js', () => {
     updateRadioSuggest: async (key, mutate) => { const next = mutate(copy(suggest[key])); if (next === undefined) throw new Error('no commit'); suggest[key] = next; }, getRadioSuggest: async () => copy(suggest), getRadioSuggestNode: async key => copy(suggest[key]) || null, removeRadioSuggest: async key => { delete suggest[key]; },
     getRadioRejected: async () => copy(rejected), addRadioReject: async (key, record) => { rejected[key] = record || 1; }, patchRadioCustomHealth: async (key, health) => { if (customs[key] && customs[key].u) customs[key] = { ...customs[key], health }; }, getRadioCustoms: async () => copy(customs), setRadioCustom: async (key, v) => { if (v) customs[key] = v; else delete customs[key]; },
     bumpSuggestDay: async (day, max) => { if (!day || suggestDay.day !== day) suggestDay = { day, n: 0 }; if (suggestDay.n >= max) return false; suggestDay.n++; return true; },
+    updateRadioRecommend: async (key, mutate) => { const next = mutate(copy(recommend[key])); if (next === undefined) throw new Error('no commit'); recommend[key] = next; }, getRadioRecommend: async () => copy(recommend), removeRadioRecommend: async key => { delete recommend[key]; }, __recommend: () => recommend,
     __suggest: () => suggest, __customs: () => customs, __rejected: () => rejected,
     __moves: () => moves, __favs: () => favs, __setFavs: v => { favs = v; },
-    __reset: () => { accounts = {}; cache = null; reports = {}; hidden = {}; moves = {}; favs = {}; suggest = {}; rejected = {}; customs = {}; suggestDay = { day: '', n: 0 }; favDev.clear(); }, __put: (k, a) => { accounts[k] = a; }, __cache: c => { cache = c; }, __reports: () => reports, __hidden: () => hidden
+    __reset: () => { accounts = {}; cache = null; reports = {}; hidden = {}; moves = {}; favs = {}; suggest = {}; rejected = {}; customs = {}; recommend = {}; suggestDay = { day: '', n: 0 }; favDev.clear(); }, __put: (k, a) => { accounts[k] = a; }, __cache: c => { cache = c; }, __reports: () => reports, __hidden: () => hidden
   };
 });
 
@@ -650,5 +651,76 @@ describe('one category per station', () => {
     const seen = new Map(); for (const cat of data.cats) for (const i of cat.items) seen.set(i.u, (seen.get(i.u) || 0) + 1);
     expect(Math.max(...seen.values())).toBe(1);
     expect(data.cats.find(c => c.id === 'manele').items.map(i => i.n)).toContain('Manele Dance');
+  });
+});
+
+describe('player RECOMMENDS a station found by frequency → admin → public (own flow, not REPORT)', () => {
+  let rv, call, KEY, URL_R;
+  const FOUND = { n: 'Server Name FM', u: 'https://fm.example.com/live', c: 'MP3', b: 128, cc: 'DE', f: 97.5, fs: 'EXTERNAL_SOURCE', city: 'Berlin', src: 'radio-browser', sid: 'uuid-1' };
+  const verdictOK = (u, over = {}) => ({ ok: true, url: u, name: '', codec: 'MP3', bitrate: 128, sampleRate: 44100, channels: 2, stable: true, stalls: 0, warnings: [], audio: true, hls: false, level: null, checkedAt: Date.now(), ...over });
+  const rec = (body, ip = '1.1.1.1') => radio.handler({ httpMethod: 'POST', headers: { 'x-forwarded-for': ip }, body: JSON.stringify({ action: 'recommend', u: FOUND.u, id: 7, token: 'good-token', ...body }) }).then(r => ({ status: r.statusCode, body: JSON.parse(r.body) }));
+  beforeEach(async () => {
+    jest.resetModules(); storage = require('./functions/firebase-storage.js'); storage.__reset(); radio = require('./functions/radio.js'); radio.__resetMemory(); radio.__resetHidden(); require('./functions/radio-reports.js').__resetLimiter();
+    const validate = require('./functions/radio-validate.js'); URL_R = FOUND.u; KEY = health.radioKey(validate.canonicalStream(FOUND.u));
+    radio.__setBrowser({ lookup: key => (key === validate.canonicalStream(FOUND.u) ? FOUND : null) });
+    radio.__setValidator(async input => verdictOK(input)); radio.__setAccountVerifier(async (id, token) => (token === 'good-token' && Number(id) === 7 ? { id: 7, name: 'Ana' } : token === 'tok8' && Number(id) === 8 ? { id: 8, name: 'Dan' } : token === 'tok9' && Number(id) === 9 ? { id: 9, name: 'Eva' } : null));
+    storage.__put('1 : Boss', { id: 1, name: 'Boss', safeWord: 'pw', role: 'admin', balance: 100, difficulty: 2, createdAt: 1 });
+    storage.__cache({ updatedAt: Date.now(), v: radio.BUILDER_VERSION, cats: [{ id: 'manele', emoji: 'F', label: 'MANELE', items: [] }, { id: 'etno', emoji: 'E', label: 'ETNO', items: [] }, { id: 'pop', emoji: 'P', label: 'POP', items: [item('Gamma', URL_C)] }, { id: 'global', emoji: 'G', label: 'GLOBAL', items: [] }] });
+    const { handler } = require('./functions/lxa-account.js'); let ip = 0;
+    call = async data => { const r = await handler({ httpMethod: 'POST', headers: { 'x-vercel-forwarded-for': '10.7.0.' + (ip++ & 255) }, body: JSON.stringify({ action: 'admin-radio', id: 1, safeWord: 'pw', ...data }) }); return { status: r.statusCode, body: JSON.parse(r.body) }; };
+  });
+  afterEach(() => { radio.__setBrowser(null); radio.__setValidator(null); radio.__setAccountVerifier(null); });
+  test('login is required; the player is the verified session, never a body field; unknown results are refused', async () => {
+    expect((await rec({ token: 'bad' })).status).toBe(401); expect((await rec({ id: 99, token: 'good-token' })).status).toBe(401);
+    expect((await rec({ u: 'https://not-returned.example.com/x' })).status).toBe(404);
+    expect(Object.keys(storage.__recommend())).toHaveLength(0);
+  });
+  test('recommendation = the SERVER record of the result (name, frequency, country, source), PENDING, with the server verdict; client-sent fields cannot change it', async () => {
+    const r = await rec({ n: 'HACKED', f: 1, cc: 'XX', status: 'APPROVED', cat: 'pop', fs: 'ADMIN_VERIFIED', by: { id: 1 } });
+    expect(r.body).toMatchObject({ ok: true, state: 'RECOMMENDED', vstate: 'VALID', count: 1 });
+    const node = storage.__recommend()[KEY]; expect(node.status).toBe('PENDING');
+    expect(node.st).toMatchObject({ n: 'Server Name FM', u: FOUND.u, f: 97.5, fs: 'EXTERNAL_SOURCE', cc: 'DE', city: 'Berlin', src: 'radio-browser', sid: 'uuid-1' });
+    expect(node.players['7']).toMatchObject({ id: 7, name: 'Ana' }); expect(node.v.ok).toBe(true); expect(node.vstate).toBe('VALID');
+    expect(Object.keys(storage.__customs())).toHaveLength(0);   // nothing is public
+    expect(JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body).cats.some(c => c.items.some(i => i.u === FOUND.u))).toBe(false);
+  });
+  test('double tap = nothing changes; two players = ONE record with both names; an invalid stream is still recorded with its real state', async () => {
+    await rec({}); expect((await rec({})).body).toMatchObject({ state: 'ALREADY', count: 1 });
+    expect((await rec({ id: 8, token: 'tok8' }, '2.2.2.2')).body).toMatchObject({ state: 'RECOMMENDED', count: 2 });
+    expect(Object.keys(storage.__recommend())).toHaveLength(1); expect(Object.keys(storage.__recommend()[KEY].players).sort()).toEqual(['7', '8']);
+    radio.__setValidator(async () => ({ ok: false, why: 'unreachable' })); storage.__reset(); storage.__put('1 : Boss', { id: 1, name: 'Boss', safeWord: 'pw', role: 'admin', balance: 100, difficulty: 2, createdAt: 1 });
+    const bad = await rec({}, '3.3.3.3'); expect(bad.body).toMatchObject({ ok: true, state: 'RECOMMENDED', vstate: 'OFFLINE' }); expect(storage.__recommend()[KEY].v.ok).toBe(false);
+    radio.__setValidator(async input => verdictOK(input)); await rec({ id: 8, token: 'tok8' }, '4.4.4.4'); expect(storage.__recommend()[KEY].v.ok).toBe(true);   // a later GOOD check replaces a failed one, and a good one is never replaced by a failed one:
+    radio.__setValidator(async () => ({ ok: false, why: 'unreachable' })); await rec({ id: 9, token: 'tok9' }, '4.4.4.5'); expect(storage.__recommend()[KEY].v.ok).toBe(true);
+  });
+  test('a station already in the list / already rejected is not recommended again', async () => {
+    storage.__cache({ updatedAt: Date.now(), v: radio.BUILDER_VERSION, cats: [{ id: 'pop', emoji: 'P', label: 'POP', items: [item('Same', FOUND.u)] }] }); radio.__resetMemory(); radio.__resetHidden();
+    expect((await rec({})).body.state).toBe('EXISTS'); expect(Object.keys(storage.__recommend())).toHaveLength(0);
+    storage.__cache({ updatedAt: Date.now(), v: radio.BUILDER_VERSION, cats: [{ id: 'pop', emoji: 'P', label: 'POP', items: [] }] }); radio.__resetMemory(); radio.__resetHidden(); await storage.addRadioReject(KEY, { at: 1 });
+    expect((await rec({})).body.state).toBe('REJECTED');
+  });
+  test('admin: list shows who/what/server data; TEST AGAIN stores a fresh verdict; APPROVE & ADD needs an EXISTING category, a fresh stream check and no duplicate; the owner frequency is ADMIN_VERIFIED', async () => {
+    await rec({}); await rec({ id: 8, token: 'tok8' }, '2.2.2.2');
+    const list = (await call({ op: 'recs' })).body; expect(list.recs).toHaveLength(1); expect(list.recs[0]).toMatchObject({ key: KEY, status: 'PENDING', n: 'Server Name FM', f: 97.5, fs: 'EXTERNAL_SOURCE', cc: 'DE', count: 2, vstate: 'VALID' }); expect(list.recs[0].players.map(p => p.name)).toEqual(['Ana', 'Dan']);
+    radio.__setValidator(async () => ({ ok: false, why: 'html' })); const t = (await call({ op: 'rec-test', key: KEY })).body; expect(t).toMatchObject({ ok: true, vstate: 'NO AUDIO' });
+    expect((await call({ op: 'rec-approve', key: KEY, cat: 'pop' })).status).toBe(409);   // a stream that does not play now cannot be approved
+    radio.__setValidator(async input => verdictOK(input));
+    expect((await call({ op: 'rec-approve', key: KEY, cat: 'newcat' })).status).toBe(400);   // no new categories
+    const ok = await call({ op: 'rec-approve', key: KEY, cat: 'pop', name: 'Radio 97.5', f: '97,5' }); expect(ok.body.ok).toBe(true);
+    expect(Object.values(storage.__customs())[0]).toMatchObject({ u: FOUND.u, n: 'Radio 97.5', cat: 'pop', f: 97.5, fs: 'ADMIN_VERIFIED', cc: 'DE' }); expect(storage.__recommend()[KEY].status).toBe('APPROVED');
+    radio.__resetHidden(); const pub = JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body).cats; expect(pub.find(c => c.id === 'pop').items[0]).toMatchObject({ n: 'Radio 97.5', u: FOUND.u });
+    expect((await rec({}, '9.9.9.9')).body.state).toBe('APPROVED');   // already in the list
+    expect((await call({ op: 'rec-approve', key: KEY, cat: 'pop' })).status).toBe(409);   // duplicate check on approve
+  });
+  test('admin: REJECT does not publish and blocks a new recommendation; frequency search lists an approved station that has a frequency (owner value first)', async () => {
+    await rec({}); expect((await call({ op: 'rec-reject', key: KEY })).body.ok).toBe(true);
+    expect(Object.keys(storage.__customs())).toHaveLength(0); expect(storage.__recommend()[KEY].status).toBe('REJECTED'); expect((await rec({}, '8.8.8.8')).body.state).toBe('REJECTED');
+    const br = require('./functions/radio-browse.js'), b = br.create({ rb: async () => [], usable: () => true, toItem: s => s, canonical: x => x });
+    const r = await b.search('', '97.5', [{ n: 'Mine', u: 'https://m.example.com/x', f: 97.5, fs: 'ADMIN_VERIFIED', cc: 'DE', c: 'MP3', b: 64 }]); expect(r.items[0]).toMatchObject({ n: 'Mine', f: 97.5, fs: 'ADMIN_VERIFIED' });
+    expect((await b.search('FR', '97.5', [{ n: 'Mine', u: 'https://m.example.com/x', f: 97.5, cc: 'DE' }])).items).toHaveLength(0);
+  });
+  test('REPORT is untouched and separate: a report never creates a recommendation', async () => {
+    const before = Object.keys(storage.__recommend()).length; const res = await radio.handler({ httpMethod: 'POST', headers: { 'x-forwarded-for': '5.5.5.5' }, body: JSON.stringify({ action: 'report', u: 'https://nowhere.example.com/x', kind: 'dead', dev: 'reportdevice00001' }) });
+    expect([400, 404]).toContain(res.statusCode); expect(Object.keys(storage.__recommend()).length).toBe(before);
   });
 });

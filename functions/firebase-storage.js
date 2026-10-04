@@ -179,6 +179,14 @@ async function updateRadioSuggest(key, mutate) {
 async function getRadioSuggest() { initFirebase(); if (!db) return {}; return (await db.ref('radioSuggest').once('value')).val() || {}; }
 async function getRadioSuggestNode(key) { initFirebase(); if (!db) return null; return (await db.ref(`radioSuggest/${key}`).once('value')).val() || null; }
 async function removeRadioSuggest(key) { initFirebase(); if (!db) throw new Error('Firebase not initialized'); await db.ref(`radioSuggest/${key}`).remove(); }
+async function updateRadioRecommend(key, mutate) {
+  initFirebase();
+  if (!db) throw new Error('Firebase not initialized');
+  const result = await db.ref(`radioRecommend/${key}`).transaction(current => mutate(current || null));
+  if (!result.committed) throw new Error('Recommendation did not commit');
+}
+async function getRadioRecommend() { initFirebase(); if (!db) return {}; return (await db.ref('radioRecommend').once('value')).val() || {}; }
+async function removeRadioRecommend(key) { initFirebase(); if (!db) throw new Error('Firebase not initialized'); await db.ref(`radioRecommend/${key}`).remove(); }
 async function getRadioRejected() { initFirebase(); if (!db) return {}; return (await db.ref('meta/radioReject').once('value')).val() || {}; }
 // a rejected link: the node keeps WHO sent it and WHAT it was (an old row is just the time stamp); the link never shows up again
 async function addRadioReject(key, record) { initFirebase(); if (!db) throw new Error('Firebase not initialized'); await db.ref(`meta/radioReject/${key}`).set(record && typeof record === 'object' ? record : Date.now()); }
@@ -278,6 +286,9 @@ module.exports = {
   getRadioFavCounts,
   setRadioFav,
   updateRadioSuggest,
+  updateRadioRecommend,
+  getRadioRecommend,
+  removeRadioRecommend,
   getRadioSuggest,
   removeRadioSuggest,
   getRadioSuggestNode,

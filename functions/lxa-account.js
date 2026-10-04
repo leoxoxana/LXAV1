@@ -583,6 +583,42 @@ const accountHandler = async event => {
         const gone = Object.entries(rejected).filter(([, v]) => v).map(([k, v]) => (typeof v === 'object' ? { key: k, at: number(v.at), u: String(v.u || ''), orig: String(v.orig || ''), n: String(v.n || ''), by: v.by || null } : { key: k, at: number(v), u: '', orig: '', n: '', by: null })).sort((a, b) => b.at - a.at).slice(0, 60);
         return json({ suggestions: rows, approved, rejected: gone, targets: radio.CUSTOM_TARGETS });
       }
+      // RECOMMENDATIONS (players recommend a station found by frequency; see radio.js handleRecommend): the owner sees WHO recommended what with the server's own data, tests again, listens, approves into an
+      // EXISTING category (fresh stream check + duplicate check first) or rejects. A recommendation never publishes by itself; the frequency set here by the owner is ADMIN_VERIFIED and is never overwritten.
+      if (op === 'recs') {
+        const radio = require('./radio'), validate = require('./radio-validate');
+        const [recs, known] = await Promise.all([store.getRadioRecommend(), radio.knownIndex(store).catch(() => new Map())]);
+        const order = { PENDING: 0, APPROVED: 1, REJECTED: 2 };
+        const rows = Object.entries(recs || {}).filter(([, v]) => v && v.st && v.st.u).map(([k, v]) => ({ key: k, status: ['APPROVED', 'REJECTED'].includes(v.status) ? v.status : 'PENDING', n: String(v.st.n || ''), u: String(v.st.u), canon: String(v.st.canon || ''), f: number(v.st.f), fs: String(v.st.fs || ''), cc: String(v.st.cc || ''), city: String(v.st.city || ''), src: String(v.st.src || ''), sid: String(v.st.sid || ''),
+          players: Object.values(v.players || {}).map(p => ({ id: number(p.id), name: String(p.name || ''), at: number(p.at), msg: String(p.msg || '') })).sort((x, y) => x.at - y.at), count: number(v.count), first: number(v.first), last: number(v.last), v: v.v || null, vstate: String(v.vstate || ''), checkedAt: number(v.checkedAt), dup: (known.get(v.st.canon || validate.canonicalStream(v.st.u)) || {}).where || '' }))
+          .sort((x, y) => order[x.status] - order[y.status] || y.last - x.last).slice(0, 200);
+        return json({ recs: rows, targets: radio.CUSTOM_TARGETS });
+      }
+      if (op === 'rec-test' || op === 'rec-approve' || op === 'rec-reject') {
+        if (!/^[0-9a-f]{16}$/.test(key)) return json({ error: 'Bad station key.' }, 400);
+        const radio = require('./radio'), validate = require('./radio-validate'), browse = require('./radio-browse'), node = (await store.getRadioRecommend())[key];
+        if (!node || !node.st || !node.st.u) return json({ error: 'Recommendation not found.' }, 404);
+        const firstPlayer = Object.values(node.players || {})[0] || null, by = firstPlayer ? { id: number(firstPlayer.id), name: String(firstPlayer.name || '') } : null, now = Date.now();
+        if (op === 'rec-reject') {
+          await store.addRadioReject(key, { at: now, u: String(node.st.u), n: String(node.st.n || ''), orig: '', by });
+          await store.updateRadioRecommend(key, current => (current && current.st ? { ...current, status: 'REJECTED', decidedAt: now } : current)); return json({ ok: true });
+        }
+        const verdict = await radio.runValidator(String(node.st.u), { durationMs: op === 'rec-test' ? 8000 : 5000 });   // ALWAYS a fresh check: an old test is never trusted for a decision
+        const fresh = { v: validate.compactVerdict(verdict), vstate: validate.stateOf(verdict), checkedAt: now };
+        await store.updateRadioRecommend(key, current => (current && current.st ? { ...current, ...fresh } : current));
+        if (op === 'rec-test') return json({ ok: true, ...fresh });
+        const cat = String(input.cat || ''); if (!radio.CUSTOM_TARGETS.includes(cat)) return json({ error: 'Bad category.' }, 400);   // an EXISTING category only
+        const name = String(input.name || node.st.n || '').replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 48); if (name.length < 2) return json({ error: 'Name too short.' }, 400);
+        if (!verdict.ok) return json({ error: 'Does not play: ' + verdict.why, why: verdict.why, vstate: fresh.vstate }, 409);
+        const url = String(verdict.url || node.st.u), canon = validate.canonicalStream(url), known = await radio.knownIndex(store).catch(() => new Map());
+        if (known.has(canon)) return json({ error: 'Already in the list.', why: 'exists' }, 409);
+        const customKey = require('./radio-reports').radioKey(url), existing = (await store.getRadioCustoms())[customKey] || null, adminF = browse.parseFreq(input.f);
+        let f = number(node.st.f), fs = f ? 'EXTERNAL_SOURCE' : 'ABSENT';
+        if (adminF !== null) { f = adminF; fs = 'ADMIN_VERIFIED'; } else if (existing && existing.fs === 'ADMIN_VERIFIED' && number(existing.f)) { f = number(existing.f); fs = 'ADMIN_VERIFIED'; }   // a weaker source never replaces the owner's value
+        await store.setRadioCustom(customKey, { u: url, n: name, c: verdict.codec || '', b: verdict.bitrate || 0, sr: verdict.sampleRate || 0, ch: verdict.channels || 0, cat, at: now, orig: String(node.st.u), by, ...(f ? { f, fs } : {}), cc: String(node.st.cc || '').slice(0, 2),
+          health: { status: verdict.warnings && verdict.warnings.length ? 'DEGRADED' : 'OK', at: now, why: '' } });
+        await store.updateRadioRecommend(key, current => (current && current.st ? { ...current, status: 'APPROVED', decidedAt: now, cat } : current)); return json({ ok: true });
+      }
       if (op === 'customs-check') { const results = await require('./radio').healthSweep(store, { max: 8, budgetMs: 25000, durationMs: 4000 }); return json({ ok: true, results }); }
       if (op === 'sug-test' || op === 'sug-approve' || op === 'sug-reject' || op === 'custom-remove' || op === 'custom-check') {
         if (!/^[0-9a-f]{16}$/.test(key)) return json({ error: 'Bad station key.' }, 400);

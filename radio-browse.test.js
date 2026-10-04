@@ -1,4 +1,5 @@
 'use strict';
+jest.mock('./functions/firebase-storage.js', () => ({ getRadioHidden: async () => ({}), getRadioMoves: async () => ({}), getRadioFavCounts: async () => ({}), getRadioCustoms: async () => ({}), getRadioCache: async () => null }));
 const br = require('./functions/radio-browse');
 const radio = require('./functions/radio');
 const validate = require('./functions/radio-validate');

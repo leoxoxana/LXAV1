@@ -207,6 +207,10 @@
         var un = document.createElement('button'); un.type = 'button'; un.className = 'radio-star radio-unmine'; un.textContent = '✖'; un.title = L().removeMine; un.setAttribute('aria-label', L().removeMine + ': ' + r.it.n);
         un.addEventListener('click', function () { removeMine(r.it.u); renderList(); }); star = un;
       }
+      if (view === 'find') {   // 📣 recommend this station to the owner (own flow, NOT the report flag): the server builds the recommendation from its own record of this result
+        var rec = document.createElement('button'); rec.type = 'button'; rec.className = 'radio-star radio-rec'; rec.textContent = '📣'; rec.title = REC().btn; rec.setAttribute('aria-label', REC().btn + ': ' + r.it.n);
+        rec.addEventListener('click', function () { recommend(r.it, rec); }); li.appendChild(b); li.appendChild(star); li.appendChild(rec); listEl.appendChild(li); return;
+      }
       li.appendChild(b); li.appendChild(star); listEl.appendChild(li);
     });
   }
@@ -393,6 +397,24 @@
   setState('idle', ''); applyText();
   window.LXARadio = { state: function () { return { state: state, view: view, cat: catId, current: currentItem() || null, tries: tries, status: statusKey, eco: eco, dir: lastDir, retried: retried }; }, audio: function () { return audio; }, bad: bad, stats: stat, deviceId: deviceId };
 
+
+  // ---- RECOMMEND (from the frequency search): POST {action:'recommend', u, id, token}; the answer says what happened (nothing is published, the owner decides)
+  var RECT = {
+    de: { btn: 'Sender empfehlen', login: 'Bitte einloggen, um zu empfehlen.', RECOMMENDED: 'Empfohlen – der Admin prüft es.', ALREADY: 'Schon empfohlen.', EXISTS: 'Schon in der Liste.', APPROVED: 'Schon in der Liste.', REJECTED: 'Wurde bereits abgelehnt.', UNKNOWN: 'Sender nicht erkannt – bitte neu suchen.', LIMIT: 'Zu viele Empfehlungen, später wieder.', fail: 'Nicht gesendet – Netzwerk / Server.', stream: 'Stream: ' },
+    ro: { btn: 'Recomandă postul', login: 'Intră în cont ca să recomanzi.', RECOMMENDED: 'Recomandat – adminul îl verifică.', ALREADY: 'Ai recomandat deja.', EXISTS: 'E deja în listă.', APPROVED: 'E deja în listă.', REJECTED: 'A fost deja respins.', UNKNOWN: 'Post necunoscut – caută din nou.', LIMIT: 'Prea multe recomandări, încearcă mai târziu.', fail: 'Netrimis – rețea / server.', stream: 'Stream: ' },
+    en: { btn: 'Recommend station', login: 'Log in to recommend.', RECOMMENDED: 'Recommended – the admin will review it.', ALREADY: 'Already recommended.', EXISTS: 'Already in the list.', APPROVED: 'Already in the list.', REJECTED: 'Already rejected.', UNKNOWN: 'Unknown station – search again.', LIMIT: 'Too many recommendations, try later.', fail: 'Not sent – network / server.', stream: 'Stream: ' }
+  };
+  var REC = function () { var l = typeof lang === 'string' ? lang : ''; return RECT[l] || RECT.en; };
+  function recommend(item, button) {
+    var msg = $('radioFindMsg'), say = function (t) { if (msg) msg.textContent = t; }, who = null;
+    try { if (typeof lxaAccount !== 'undefined' && lxaAccount && typeof lxaToken !== 'undefined' && lxaToken) who = { id: lxaAccount.id, token: lxaToken }; } catch (e) { who = null; }
+    if (!who) { say(REC().login); return; }
+    if (button.disabled) return; button.disabled = true;   // no double send
+    fetch('/api/radio', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'recommend', u: item.u, id: who.id, token: who.token }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (r) { var key = r.state; say(r.ok ? (REC()[key] || REC().RECOMMENDED) + (r.vstate && r.vstate !== 'VALID' && key === 'RECOMMENDED' ? ' ' + REC().stream + r.vstate : '') : (key === 'LOGIN' ? REC().login : (REC()[key] || REC().fail))); if (!(r.ok && key === 'RECOMMENDED')) button.disabled = key === 'ALREADY' || key === 'EXISTS' || key === 'APPROVED' || key === 'REJECTED'; else { button.textContent = '✅'; } })
+      .catch(function () { button.disabled = false; say(REC().fail); });
+  }
   // ---- FIND: any country, exact frequency, auto scanner (data comes from the directory through /api/radio?browse=...; the frequency is read from station names, so a station that does not write it cannot be found)
   var fb = $('radioFindBtn'), fbox = $('radioFind'), fcc = $('radioFindCc'), ff = $('radioFindF'), fgo = $('radioFindGo'), sa = $('radioScanA'), sb = $('radioScanB'), sgo = $('radioScanGo'), fclose = $('radioFindClose'), fmsg = $('radioFindMsg');
   if (fb && fbox) (function () {
