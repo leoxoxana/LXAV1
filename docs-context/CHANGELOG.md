@@ -3,6 +3,12 @@
 Rewritten from scratch 2026-10-03 (65 commits at that time; the hash is the authoritative detail). Newest first. Format per entry: what the user asked / cause / change / how it was verified / limits.
 "Verified" = measured in headless Edge or Jest unless it says otherwise; nothing here was verified on a real phone.
 
+## 2026-10-04 (latest) - Radio list rebuilds itself after a deploy (commit 8d57da2; radio.js v=7)
+- Owner: "still 39 radios in manele, it looks like you did nothing". Checked live: the page already served radio.js?v=6 (v49 deployed) but /api/radio returned the OLD list: 39 manele, built 07:30, no style codes, no top flags. Cause (my design bug): a stored list (Firebase meta/radio + memory) counted as fresh for 12 h whatever code built it, and the exact url was a Vercel CDN HIT (s-maxage 900 s); the phone also caches the list 30 min (localStorage).
+- Immediate fix on production: GET /api/radio?refresh=1 (the endpoint the daily cron uses) rebuilt the list in 27 s: MANELE 68, style codes, 3 top flags, trap / techno first, folk last; all categories: RAP 18, HOUSE 30, TECHNO 31, DANCE 38, POP 34, ROCK 27, CHILL 33. The exact url served the new list after the CDN window (<= 15 min); phones after their 30 min cache.
+- Root cause fix (needs one more deploy): functions/radio.js has BUILDER_VERSION = sha1 of its own file; getList() rebuilds a stored list that has no `v` or another `v` (stale is still served if the rebuild fails); CDN s-maxage 300 s; device cache key lxa-radio-list-v2.
+- Verified: jest 148, e2e_radio 18/18, e2e_radio2 20/20, e2e_radio3 13/13, layout OK, auth / AUTO 21/21, header matrix unchanged. NOT deployed (the live list is already correct, the fix protects the next deploys).
+
 ## 2026-10-04 (latest) - MANELE lists every working manele station (commit dc37d61; radio.js v=6)
 - Owner complaint: the manele category is "broken": only folclor and populara, "Radio Folclor" at number 5, while he finds about 100 manele radios (and asks whether trapanele / tehnomanele / electromanele / house manele / minimal manele exist).
 - Diagnosis: (1) the LIVE site still runs the v46 builder (checked: /api/radio has no style codes, no top flag; Radio Folclor is #6 because its tags contain petrecere); the taste order of v48 was only local. (2) The category was capped: 35 https + 15 twins candidates, 60 items, so only 36-39 of the 63 manele stations that answer were listed.
