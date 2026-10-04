@@ -786,6 +786,7 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
     const reset = spin.jackpotCycleCompleted ? `<span class="board-total board-bonus mission-bonus"><span>${T118('missionDone')}</span><b>5/5</b></span>` : '';
     const wildLineSet = new Set((spin.wild?.positions || []).map(position => position.line));
     const winningLines = spin.finalResults.map((hits, index) => ({ hits, index, amount: spin.linePayouts[index], wild: wildLineSet.has(index) })).filter(line => line.amount > 0);
+    $('#boardTitle').classList.toggle('lines-win', !spin.jackpotPayout && winningLines.length > 0);   // "4 LINIEN" in green
     $('#boardTitle').textContent = spin.jackpotPayout ? T118('missionTitle') : winningLines.length ? `${winningLines.length} ${({de:['LINIE','LINIEN'],ro:['LINIE','LINII'],en:['LINE','LINES']}[lang] || ['LINE','LINES'])[winningLines.length === 1 ? 0 : 1]}` : T118('noWinLine');
     // V225: GEWINN BRUTTO / NETTO render in their own #boardSummary
     // container, separate from the LINIE chips in #boardDetails.
@@ -794,7 +795,7 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
     // meant to be read before the totals now. This file only ever targets
     // these by id, so the content logic below is unchanged; only the
     // markup order (and the CSS layout built around it) moved.
-    const totalHtml = `<span class="board-total net-result ${spin.netResult < 0 ? 'loss' : spin.netResult > 0 ? 'profit' : 'even'}"><span>${T118('net')}</span><b>${signedEuroV112(spin.netResult)}</b></span><span class="board-total gross-result"><span>${({de:'BRUTTO',ro:'BRUT',en:'GROSS'}[lang] || 'GROSS')}${wild}</span><b>+${euro(spin.totalPayout)}</b></span>`;   // one row: NETTO first, BRUTTO second (same size); colours come from the classes, not from the position
+    const netHtml = `<span class="board-total net-result ${spin.netResult < 0 ? 'loss' : spin.netResult > 0 ? 'profit' : 'even'}"><span>${T118('net')}</span><b>${signedEuroV112(spin.netResult)}</b></span>`, grossHtml = `<span class="board-total gross-result"><span>${({de:'BRUTTO',ro:'BRUT',en:'GROSS'}[lang] || 'GROSS')}${wild}</span><b>+${euro(spin.totalPayout)}</b></span>`, totalHtml = grossHtml + netHtml;   // one row: BRUTTO first, NETTO second (same size); colours come from the classes, not from the position
     if (!winningLines.length && !spin.jackpotPayout) {
       $('#boardDetails').innerHTML = `<span>${T118('noWinNext')}${wild}</span>`;
       $('#boardSummary').innerHTML = '';
@@ -806,7 +807,7 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
       // at a readable size. This short form fits 5 chips on one row without
       // shrinking the font into illegibility or needing horizontal scroll.
       $('#boardDetails').innerHTML = winningLines.map(line => `<div class="${line.hits === 10 && !line.wild ? 'jackpot-result' : ''}"><span>L${line.index + 1} · ${line.hits}/10</span><b>+${euro(line.amount)}</b></div>`).join('');
-      // totalHtml (NETTO + BRUTTO) stays first in the summary; the colours are tied to .net-result / .gross-result (layout-fix.css),
+      // totalHtml (BRUTTO + NETTO) stays first in the summary; the colours are tied to .net-result / .gross-result (layout-fix.css),
       // so the jackpot / reset blocks after it can never steal them.
       $('#boardSummary').innerHTML = totalHtml + jackpot + reset;
     }
