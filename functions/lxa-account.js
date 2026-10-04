@@ -564,11 +564,11 @@ const accountHandler = async event => {
       { const denied = await checkSafeWord(admin, input.safeWord); if (denied) return denied; }
       const store = require('./firebase-storage'), health = require('./radio-reports'), op = String(input.op || 'list'), key = String(input.key || '');
       if (op === 'list') {
-        const [reports, hidden, cache, moves] = await Promise.all([store.getRadioReports(), store.getRadioHidden(), store.getRadioCache().catch(() => null), store.getRadioMoves()]);
+        const [reports, hidden, cache, moves, suggested] = await Promise.all([store.getRadioReports(), store.getRadioHidden(), store.getRadioCache().catch(() => null), store.getRadioMoves(), store.getRadioSuggest()]);
         const stations = cache && Array.isArray(cache.cats) ? new Set(cache.cats.flatMap(cat => cat.items.map(item => item.u))).size : 0;
         const radio = require('./radio'), labels = new Map(((cache && cache.cats) || []).map(cat => [cat.id, cat])), categories = radio.MOVE_TARGETS.filter(id => labels.has(id)).map(id => ({ id, emoji: labels.get(id).emoji, label: labels.get(id).label }));
         const summary = health.summarize(reports, hidden); summary.reports.forEach(row => { row.moved = (moves[row.key] && moves[row.key].cat) || ''; });
-        return json({ ...summary, categories, stations, outdated: !cache || cache.v !== radio.BUILDER_VERSION, updatedAt: number(cache && cache.updatedAt), checkedAt: number(cache && (cache.checkedAt || cache.updatedAt)), dropped: cache && Array.isArray(cache.dropped) ? cache.dropped.slice(0, 40).map(d => ({ n: String(d.n || ''), u: String(d.u || ''), at: number(d.at), key: health.radioKey(d.u) })) : [] });
+        return json({ ...summary, categories, stations, suggestCount: Object.keys(suggested || {}).length, outdated: !cache || cache.v !== radio.BUILDER_VERSION, updatedAt: number(cache && cache.updatedAt), checkedAt: number(cache && (cache.checkedAt || cache.updatedAt)), dropped: cache && Array.isArray(cache.dropped) ? cache.dropped.slice(0, 40).map(d => ({ n: String(d.n || ''), u: String(d.u || ''), at: number(d.at), key: health.radioKey(d.u) })) : [] });
       }
       // STATIONS OF THE PLAYERS: the links they offered with the 📨 button (one row per link), test, approve into ANY of the 12 categories (it becomes a public station, at the top of that category),
       // reject (the link never shows up again), remove an approved station

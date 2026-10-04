@@ -7,16 +7,23 @@
   var $ = function (id) { return document.getElementById(id); };
   var playBtn = $('radioPlay'), prevBtn = $('radioPrev'), nextBtn = $('radioNext'), titleBtn = $('radioTitle'), nameEl = $('radioName'), statusEl = $('radioStatus'), volEl = $('radioVol'), toggleBtn = $('radioToggle'),
       panel = $('radioPanel'), catsEl = $('radioCats'), searchEl = $('radioSearch'), diceBtn = $('radioDice'), favBtn = $('radioFav'), recentBtn = $('radioRecent'), listEl = $('radioList'),
-      sleepEl = $('radioSleep'), ecoEl = $('radioEco'), ecoLabel = $('radioEcoLabel'), msgEl = $('radioMsg');
+      sleepEl = $('radioSleep'), ecoEl = $('radioEco'), ecoLabel = $('radioEcoLabel'), msgEl = $('radioMsg'),
+      addBtn = $('radioAddBtn'), addBox = $('radioAdd'), addUrl = $('radioAddUrl'), addName = $('radioAddName'), addGo = $('radioAddGo'), addSug = $('radioAddSuggest'), addClose = $('radioAddClose'), addMsg = $('radioAddMsg');
   var KEY = 'lxa-radio-v1', LIST_KEY = 'lxa-radio-list-v3', BAD_KEY = 'lxa-radio-bad-v1', FAV_KEY = 'lxa-radio-fav-v1', RECENT_KEY = 'lxa-radio-recent-v1';
   var LIST_TTL = 30 * 60 * 1000, BAD_TTL = 24 * 3600 * 1000, ECO_KBPS = 96, MAX_FAV = 60, MAX_RECENT = 5;
   var TEXT = {
     de: { pick: 'Sender wählen', search: 'Suchen…', loading: 'Lädt…', none: 'Keine Sender gefunden.', fail: 'Radio-Liste nicht erreichbar.', broken: 'Sender nicht erreichbar – nächster…', allbroken: 'Kein Sender in dieser Kategorie erreichbar.', reconnect: 'Verbindet neu…', offline: 'Offline – wartet auf Netz', error: 'Fehler',
-          play: 'Radio abspielen', pause: 'Radio pausieren', stations: 'Senderliste', volume: 'Lautstärke', prev: 'Vorheriger Sender', next: 'Nächster Sender', dice: 'Zufälliger Sender', fav: 'Favoriten', recent: 'Zuletzt gehört', noFav: 'Noch keine Favoriten – tippe ☆ bei einem Sender.', noRecent: 'Noch nichts gehört.', sleep: 'Einschlaf-Timer', eco: 'Eco ≤96 kbps', addFav: 'Zu Favoriten', delFav: 'Aus Favoriten', sleepDone: 'Gute Nacht – Radio aus', flag: 'Sender melden: funktioniert nicht', reported: 'Danke – gemeldet', noTop: 'Noch keine Lieblinge der Community – tippe ☆ bei einem Sender, ab 2 Spielern erscheint er hier.' },
+          play: 'Radio abspielen', pause: 'Radio pausieren', stations: 'Senderliste', volume: 'Lautstärke', prev: 'Vorheriger Sender', next: 'Nächster Sender', dice: 'Zufälliger Sender', fav: 'Favoriten', recent: 'Zuletzt gehört', noFav: 'Noch keine Favoriten – tippe ☆ bei einem Sender.', noRecent: 'Noch nichts gehört.', sleep: 'Einschlaf-Timer', eco: 'Eco ≤96 kbps', addFav: 'Zu Favoriten', delFav: 'Aus Favoriten', sleepDone: 'Gute Nacht – Radio aus', flag: 'Sender melden: funktioniert nicht', reported: 'Danke – gemeldet', noTop: 'Noch keine Lieblinge der Community – tippe ☆ bei einem Sender, ab 2 Spielern erscheint er hier.',
+          add: 'Eigenen Sender hinzufügen', addGo: 'Hinzufügen und abspielen', addUrl: 'Link (https://…, .pls, .m3u)', addNamePh: 'Name (optional)', addSuggestOff: 'Dem Betreiber vorschlagen (nur wenn du tippst)', addSuggestOn: 'Wird dem Betreiber vorgeschlagen', close: 'Schließen', removeMine: 'Aus meiner Liste entfernen',
+          mAdded: 'Hinzugefügt', mSuggested: 'Danke – vorgeschlagen', mBad: 'Das ist kein gültiger Link.', mBlocked: 'Dieser Link ist nicht erlaubt.', mUnreachable: 'Nicht erreichbar oder kein Radio-Stream.', mHttpOnly: 'Nur http: Der Browser blockiert ihn auf dieser Seite.', mNotAudio: 'Dort ist kein Audio-Stream zu finden.', mLimit: 'Zu viele Versuche – bitte später.', mFull: 'Maximal 10 eigene Sender.', mNoIos: 'Dieses Format (Ogg / FLAC) spielt das iPhone nicht ab.', mOffline: 'Keine Verbindung.' },
     ro: { pick: 'Alege o stație', search: 'Caută…', loading: 'Se încarcă…', none: 'Nicio stație găsită.', fail: 'Lista de radio nu e disponibilă.', broken: 'Stația nu răspunde – trec la următoarea…', allbroken: 'Nicio stație din această categorie nu răspunde.', reconnect: 'Se reconectează…', offline: 'Offline – aștept rețeaua', error: 'Eroare',
-          play: 'Pornește radioul', pause: 'Oprește radioul', stations: 'Lista de stații', volume: 'Volum', prev: 'Stația anterioară', next: 'Stația următoare', dice: 'Stație la întâmplare', fav: 'Favorite', recent: 'Ascultate recent', noFav: 'Încă nu ai favorite – atinge ☆ la o stație.', noRecent: 'Încă n-ai ascultat nimic.', sleep: 'Cronometru de somn', eco: 'Eco ≤96 kbps', addFav: 'Adaugă la favorite', delFav: 'Scoate din favorite', sleepDone: 'Noapte bună – radio oprit', flag: 'Raportează: stația nu merge', reported: 'Mulțumim – raportat', noTop: 'Încă niciun favorit al comunității – atinge ☆ la o stație, de la 2 jucători apare aici.' },
+          play: 'Pornește radioul', pause: 'Oprește radioul', stations: 'Lista de stații', volume: 'Volum', prev: 'Stația anterioară', next: 'Stația următoare', dice: 'Stație la întâmplare', fav: 'Favorite', recent: 'Ascultate recent', noFav: 'Încă nu ai favorite – atinge ☆ la o stație.', noRecent: 'Încă n-ai ascultat nimic.', sleep: 'Cronometru de somn', eco: 'Eco ≤96 kbps', addFav: 'Adaugă la favorite', delFav: 'Scoate din favorite', sleepDone: 'Noapte bună – radio oprit', flag: 'Raportează: stația nu merge', reported: 'Mulțumim – raportat', noTop: 'Încă niciun favorit al comunității – atinge ☆ la o stație, de la 2 jucători apare aici.',
+          add: 'Adaugă stația ta', addGo: 'Adaugă și pornește', addUrl: 'Link (https://…, .pls, .m3u)', addNamePh: 'Nume (opțional)', addSuggestOff: 'Propune-o administratorului (doar dacă apeși)', addSuggestOn: 'Se propune administratorului', close: 'Închide', removeMine: 'Scoate din lista mea',
+          mAdded: 'Adăugată', mSuggested: 'Mulțumim – propusă', mBad: 'Nu e un link valid.', mBlocked: 'Linkul nu e permis.', mUnreachable: 'Nu răspunde sau nu e un stream radio.', mHttpOnly: 'Doar http: browserul îl blochează pe acest site.', mNotAudio: 'Acolo nu am găsit un stream audio.', mLimit: 'Prea multe încercări – mai târziu.', mFull: 'Maximum 10 stații proprii.', mNoIos: 'Formatul (Ogg / FLAC) nu merge pe iPhone.', mOffline: 'Fără conexiune.' },
     en: { pick: 'Pick a station', search: 'Search…', loading: 'Loading…', none: 'No stations found.', fail: 'Radio list unavailable.', broken: 'Station not reachable – trying the next one…', allbroken: 'No station in this category is reachable.', reconnect: 'Reconnecting…', offline: 'Offline – waiting for network', error: 'Error',
-          play: 'Play radio', pause: 'Pause radio', stations: 'Station list', volume: 'Volume', prev: 'Previous station', next: 'Next station', dice: 'Random station', fav: 'Favorites', recent: 'Recently played', noFav: 'No favorites yet – tap ☆ on a station.', noRecent: 'Nothing played yet.', sleep: 'Sleep timer', eco: 'Eco ≤96 kbps', addFav: 'Add to favorites', delFav: 'Remove from favorites', sleepDone: 'Good night – radio off', flag: 'Report: station does not work', reported: 'Thanks – reported', noTop: 'No community favourites yet – tap ☆ on a station, from 2 players it shows up here.' }
+          play: 'Play radio', pause: 'Pause radio', stations: 'Station list', volume: 'Volume', prev: 'Previous station', next: 'Next station', dice: 'Random station', fav: 'Favorites', recent: 'Recently played', noFav: 'No favorites yet – tap ☆ on a station.', noRecent: 'Nothing played yet.', sleep: 'Sleep timer', eco: 'Eco ≤96 kbps', addFav: 'Add to favorites', delFav: 'Remove from favorites', sleepDone: 'Good night – radio off', flag: 'Report: station does not work', reported: 'Thanks – reported', noTop: 'No community favourites yet – tap ☆ on a station, from 2 players it shows up here.',
+          add: 'Add your own station', addGo: 'Add and play', addUrl: 'Link (https://…, .pls, .m3u)', addNamePh: 'Name (optional)', addSuggestOff: 'Suggest it to the owner (only if you tap)', addSuggestOn: 'Will be suggested to the owner', close: 'Close', removeMine: 'Remove from my list',
+          mAdded: 'Added', mSuggested: 'Thanks – suggested', mBad: 'That is not a valid link.', mBlocked: 'This link is not allowed.', mUnreachable: 'Not reachable or not a radio stream.', mHttpOnly: 'http only: the browser blocks it on this site.', mNotAudio: 'No audio stream found there.', mLimit: 'Too many tries – later.', mFull: 'At most 10 own stations.', mNoIos: 'This format (Ogg / FLAC) does not play on iPhone.', mOffline: 'No connection.' }
   };
   var L = function () { var l = typeof lang === 'string' ? lang : ''; if (!TEXT[l]) { try { l = localStorage.getItem('lxaLang') || ''; } catch (e) { l = ''; } } return TEXT[l] || TEXT.de; };
   var store = {
@@ -47,6 +54,11 @@
   var persist = function () { var it = currentItem(); store.set(KEY, { cat: catId, url: it ? it.u : saved.url, name: it ? it.n : saved.name, vol: Number(volEl.value), eco: eco }); };
 
   // ---- device memory: favorites, recent, stations that failed here in the last 24 h
+  // ---- MY stations: the links the player brought himself (private: they stay on this device; they sit at the top of ⭐ Favorites, marked 🔗). Max 10.
+  var MINE_KEY = 'lxa-radio-mine-v1', MAX_MINE = 10;
+  var mine = function () { return store.get(MINE_KEY, []).map(function (i) { var o = cleanItem(i); if (o) o.mine = 1; return o; }).filter(Boolean).slice(0, MAX_MINE); };
+  var saveMine = function (item) { var list = mine().filter(function (m) { return m.u !== item.u; }); list.unshift(item); store.set(MINE_KEY, list.slice(0, MAX_MINE)); };
+  var removeMine = function (u) { store.set(MINE_KEY, mine().filter(function (m) { return m.u !== u; })); };
   var favs = function () { return store.get(FAV_KEY, []).map(cleanItem).filter(Boolean); };
   var recents = function () { return store.get(RECENT_KEY, []).map(cleanItem).filter(Boolean); };
   var isFav = function (u) { return favs().some(function (f) { return f.u === u; }); };
@@ -85,7 +97,7 @@
   var ecoFilter = function (items) { var small = items.filter(function (i) { return !i.b || i.b <= ECO_KBPS; }); return small.length >= 3 ? small : items; };
   function catRaw(id) { var c = data && data.cats.filter(function (x) { return x.id === id; })[0]; return c ? (eco ? { id: c.id, emoji: c.emoji, label: c.label, items: ecoFilter(c.items) } : c) : null; }
   function cat(id) {
-    if (id === 'fav') return { id: 'fav', items: favs() };
+    if (id === 'fav') { var mineItems = mine(), starred = favs().filter(function (f) { return !mineItems.some(function (m) { return m.u === f.u; }); }); return { id: 'fav', items: mineItems.concat(starred) }; }   // MY stations first, then the stars
     if (id === 'recent') return { id: 'recent', items: recents() };
     var c = catRaw(id); if (!c) return null;
     return c;
@@ -115,6 +127,8 @@
     searchEl.placeholder = L().search; toggleBtn.setAttribute('aria-label', L().stations); volEl.setAttribute('aria-label', L().volume); prevBtn.setAttribute('aria-label', L().prev); nextBtn.setAttribute('aria-label', L().next);
     diceBtn.setAttribute('aria-label', L().dice); diceBtn.title = L().dice; favBtn.setAttribute('aria-label', L().fav); favBtn.title = L().fav; recentBtn.setAttribute('aria-label', L().recent); recentBtn.title = L().recent;
     if (flagBtn) { flagBtn.setAttribute('aria-label', L().flag); flagBtn.title = L().flag; }
+    addBtn.setAttribute('aria-label', L().add); addBtn.title = L().add; addGo.setAttribute('aria-label', L().addGo); addGo.title = L().addGo; addClose.setAttribute('aria-label', L().close); addClose.title = L().close;
+    addUrl.placeholder = L().addUrl; addUrl.setAttribute('aria-label', L().addUrl); addName.placeholder = L().addNamePh; addName.setAttribute('aria-label', L().addNamePh); addSug.title = suggestOn ? L().addSuggestOn : L().addSuggestOff; addSug.setAttribute('aria-label', addSug.title);
     sleepEl.setAttribute('aria-label', L().sleep); sleepEl.title = L().sleep; ecoLabel.textContent = L().eco; setState(state, statusKey); label(); if (data && !panel.hidden) renderList();
   }
 
@@ -181,12 +195,16 @@
       var name = document.createElement('span'); name.className = 'radio-st-name';
       if (view === 'cat' && !q && r.it.top) { var top = document.createElement('span'); top.className = 'radio-top'; top.textContent = '🔥'; top.setAttribute('aria-hidden', 'true'); name.appendChild(top); }   // 🔥 = one of the three most popular stations of the category (flag from the server); it sits INSIDE the name, so the row layout (name left, quality right) stays the same
       name.appendChild(document.createTextNode(r.it.n));
-      var meta = document.createElement('small'); meta.textContent = (r.cid === 'manele' && r.it.s ? r.it.s.map(function (s) { return STYLE_ICON[s] || ''; }).join('') + ' ' : '') + (r.it.cc && r.it.cc !== 'RO' ? r.it.cc + ' · ' : '') + r.it.c + (r.it.b ? ' ' + r.it.b : '');
+      var meta = document.createElement('small'); meta.textContent = (r.it.mine ? '🔗 ' : '') + (r.cid === 'manele' && r.it.s ? r.it.s.map(function (s) { return STYLE_ICON[s] || ''; }).join('') + ' ' : '') + (r.it.cc && r.it.cc !== 'RO' ? r.it.cc + ' · ' : '') + r.it.c + (r.it.b ? ' ' + r.it.b : '');
       b.appendChild(name); b.appendChild(meta);
       b.addEventListener('click', function () { if (r.i >= 0) play(r.cid, r.i, false); else { var cc = cat(r.cid), k = cc ? indexOfUrl(cc.items, r.it.u) : -1; play(r.cid, k >= 0 ? k : 0, false, k >= 0 ? undefined : r.it); } afterPick(); });
       var star = document.createElement('button'); star.type = 'button'; star.className = 'radio-star'; var isF = faved.indexOf(r.it.u) !== -1;
       star.textContent = isF ? '★' : '☆'; star.setAttribute('aria-pressed', isF ? 'true' : 'false'); star.setAttribute('aria-label', (isF ? L().delFav : L().addFav) + ': ' + r.it.n); star.classList.toggle('on', isF);
       star.addEventListener('click', function () { toggleFav(r.it); if (view === 'fav') { renderList(); } else { var f = isFav(r.it.u); star.textContent = f ? '★' : '☆'; star.setAttribute('aria-pressed', f ? 'true' : 'false'); star.classList.toggle('on', f); star.setAttribute('aria-label', (f ? L().delFav : L().addFav) + ': ' + r.it.n); } });
+      if (r.it.mine) {   // my own station: ✖ takes it out of my list (the star is for the stations of the lists)
+        var un = document.createElement('button'); un.type = 'button'; un.className = 'radio-star radio-unmine'; un.textContent = '✖'; un.title = L().removeMine; un.setAttribute('aria-label', L().removeMine + ': ' + r.it.n);
+        un.addEventListener('click', function () { removeMine(r.it.u); renderList(); }); star = un;
+      }
       li.appendChild(b); li.appendChild(star); listEl.appendChild(li);
     });
   }
@@ -197,12 +215,13 @@
     if (audio) return audio;
     audio = new Audio(); audio.preload = 'none';
     audio.addEventListener('playing', function () {
+      if (unlocking) return;   // the 0.4 s of silence that unlocks the element for a station that is being found: not a station playing
       clearTimeout(failTimer); tries = 0; retried = false; waitOnline = false; setState('playing', '');
       var it = currentItem(); if (it) { clearBad(it.u); addRecent(it); }
       if (navigator.mediaSession) navigator.mediaSession.playbackState = 'playing';
     });
     audio.addEventListener('waiting', function () { if (state === 'playing') armFail('stall'); });
-    audio.addEventListener('error', function () { failCode = 'e' + (audio.error ? audio.error.code : 0); onBroken(attemptSeq); });   // MediaError: 1 aborted, 2 network, 3 decode, 4 source not supported
+    audio.addEventListener('error', function () { if (unlocking) return; failCode = 'e' + (audio.error ? audio.error.code : 0); onBroken(attemptSeq); });   // MediaError: 1 aborted, 2 network, 3 decode, 4 source not supported
     audio.addEventListener('stalled', function () { if (state === 'loading') armFail('timeout'); });
     var v = Number(volEl.value) / 100; audio.volume = v;
     if (Math.abs(audio.volume - v) > 0.01 && v !== 1) bar.classList.add('no-volume');   // iOS: the volume is the hardware buttons only
@@ -271,6 +290,53 @@
       if (!pool.length) return; play(c.id, pool[Math.floor(Math.random() * pool.length)], false); afterPick();
     }).catch(function () { setState('error', 'fail'); });
   }
+
+  // ---- ➕ my own station: the link the player pastes (a stream, a .pls / .m3u playlist or the page of a radio server) is checked by the server, then it plays at once and sits at the top of ⭐ Favorites.
+  // It stays on this device. The 📨 button (off by default) additionally offers the link to the owner of the site, who may make it public.
+  var suggestOn = false;
+  var say = function (key, extra) { addMsg.textContent = key ? (extra || '') + L()[key] : ''; };
+  var hostOf = function (u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
+  var WHY = { 'bad-url': ['mBad', '⚠️ '], blocked: ['mBlocked', '⛔ '], unreachable: ['mUnreachable', '❌ '], 'http-only': ['mHttpOnly', '🔓 '], 'not-audio': ['mNotAudio', '🎧 '], limit: ['mLimit', '⏳ '] };
+  function openAdd(open, url) {
+    addBox.hidden = !open; addBtn.setAttribute('aria-expanded', open ? 'true' : 'false'); addBtn.classList.toggle('on', open);
+    if (open) { if (panel.hidden) openPanel(true); if (typeof url === 'string') addUrl.value = url; say(''); try { addUrl.focus(); } catch (e) { /* ignore */ } }
+  }
+  function sendSuggest(item) {
+    try { fetch('/api/radio', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'suggest', u: item.u, n: item.n, dev: deviceId() }), keepalive: true }).catch(function () { /* the link stays in my list anyway */ }); } catch (e) { /* ignore */ }
+  }
+  // The server needs a moment to find the stream, and a browser (iPhone above all) only lets an audio element start inside the tap that asked for it: so the element is "unlocked" by the tap with 0.4 s of
+  // silence (a file of this site), and the real stream is started on the same element afterwards. If nothing plays in the end the element is put back as it was.
+  var unlocking = false;
+  function unlockAudio() {
+    if (state === 'playing' || state === 'loading') return;   // something plays already: the element is unlocked
+    try { var a = ensureAudio(); unlocking = true; a.src = '/assets/silence.mp3'; var p = a.play(); if (p && p.catch) p.catch(function () { /* ignore */ }); } catch (e) { unlocking = false; }
+  }
+  function relock() { if (!unlocking) return; unlocking = false; try { if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); } } catch (e) { /* ignore */ } }
+  function addStation() {
+    var raw = addUrl.value.trim(), typed = addName.value.trim().slice(0, 40); if (!raw) return;
+    if (mine().length >= MAX_MINE && !mine().some(function (m) { return m.u === raw; })) { say('mFull', '⚠️ '); return; }
+    say('', ''); addMsg.textContent = '⏳'; addGo.disabled = true; unlockAudio();
+    fetch('/api/radio?resolve=' + encodeURIComponent(raw), { cache: 'no-store' }).then(function (r) { return r.json().catch(function () { return null; }); }).catch(function () { return null; }).then(function (res) {
+      addGo.disabled = false;
+      var failed = function (key, mark) { relock(); say(key, mark); };
+      if (!res) { if (/^https:\/\/[^\s]+$/i.test(raw)) res = { ok: true, url: raw, name: '', codec: '', bitrate: 0 }; else { failed('mOffline', '📡 '); return; } }   // the server cannot be asked: a plain https link is tried as it is
+      if (!res.ok) { var w = WHY[res.why] || WHY.unreachable; failed(w[0], w[1]); return; }
+      if (res.iosOk === false && /iPhone|iPad|iPod/i.test(navigator.userAgent)) { failed('mNoIos', '⚠️ '); return; }
+      var item = { n: (typed || res.name || hostOf(res.url) || 'Radio').slice(0, 48), u: res.url, c: String(res.codec || ''), b: Number(res.bitrate) || 0, cc: '', mine: 1 };
+      if (!safeUrl(item.u)) { failed('mBad', '⚠️ '); return; }
+      saveMine(item); if (suggestOn) { sendSuggest(item); say('mSuggested', '✅ '); } else say('mAdded', '✅ ');
+      addUrl.value = ''; addName.value = '';
+      unlocking = false;   // the element stays unlocked: the real stream starts on it now
+      view = 'fav'; searchEl.value = ''; renderCats(); renderList(); persist(); play('fav', 0, false);
+    });
+  }
+  addBtn.addEventListener('click', function () { openAdd(addBox.hidden); });
+  addClose.addEventListener('click', function () { openAdd(false); });
+  addGo.addEventListener('click', addStation);
+  addUrl.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addStation(); } });
+  addSug.addEventListener('click', function () { suggestOn = !suggestOn; addSug.setAttribute('aria-pressed', suggestOn ? 'true' : 'false'); addSug.classList.toggle('on', suggestOn); addSug.title = suggestOn ? L().addSuggestOn : L().addSuggestOff; addSug.setAttribute('aria-label', addSug.title); });
+  // a shared link (?radio=<stream address>) opens the form with the address filled in; nothing is added or played before the player taps ▶
+  try { var shared = new URLSearchParams(location.search).get('radio'); if (shared && /^https?:\/\//i.test(shared)) { setTimeout(function () { openAdd(true, shared.slice(0, 400)); }, 400); if (history.replaceState) history.replaceState(null, '', location.pathname); } } catch (e) { /* ignore */ }
 
   // ---- sleep timer
   function setSleep(min) {

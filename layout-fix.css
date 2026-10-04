@@ -5941,3 +5941,15 @@ html body:not(#_):not(#__):not(#___):not(#____) .radio-chip:disabled{opacity:.5!
 
 /* ===== Confirm dialog: ABOVE the account / admin panel (it was under it: z 3000 < 5000, so on some phones the dialog and the panel fought for the screen), light backdrop so the panel stays readable behind it ===== */
 html body:not(#_):not(#__):not(#___):not(#____) .lxa-confirm{z-index:6000!important;background:rgba(4,6,28,.5)!important;-webkit-backdrop-filter:blur(2px)!important;backdrop-filter:blur(2px)!important}
+
+/* ===== Radio: ➕ my own station (form under the search row), 🔗 rows, ✖ to remove ===== */
+html body:not(#_):not(#__):not(#___):not(#____) .radio-add{display:grid!important;gap:6px!important;margin:0 0 8px!important;padding:8px!important;border:1px solid rgba(190,140,255,.4)!important;border-radius:10px!important;background:rgba(10,18,72,.5)!important;box-sizing:border-box!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-add[hidden]{display:none!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-add input{width:100%!important;min-width:0!important;height:34px!important;margin:0!important;padding:0 10px!important;box-sizing:border-box!important;border-radius:8px!important;border:1px solid rgba(190,140,255,.45)!important;background:rgba(8,10,40,.85)!important;color:#fff!important;font-size:16px!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-add-row{display:flex!important;gap:6px!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-add-row .radio-mini{flex:1 1 0!important;width:auto!important;height:34px!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-add-go{background:linear-gradient(180deg,#ff7a45,#e8442a)!important;border-color:rgba(255,160,120,.8)!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-add-suggest.on,html body:not(#_):not(#__):not(#___):not(#____) #radioAddBtn.on{background:linear-gradient(180deg,#ff7a45,#e8442a)!important;border-color:rgba(255,160,120,.8)!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-add-msg{margin:0!important;min-height:0!important;color:#ffd0a8!important;font:600 12px/1.35 Consolas,monospace!important;overflow-wrap:anywhere!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-add-msg:empty{display:none!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-unmine{color:#ff9aa8!important;font-size:14px!important}
