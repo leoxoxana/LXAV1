@@ -568,18 +568,18 @@ const accountHandler = async event => {
         const stations = cache && Array.isArray(cache.cats) ? new Set(cache.cats.flatMap(cat => cat.items.map(item => item.u))).size : 0;
         const radio = require('./radio'), labels = new Map(((cache && cache.cats) || []).map(cat => [cat.id, cat])), categories = radio.MOVE_TARGETS.filter(id => labels.has(id)).map(id => ({ id, emoji: labels.get(id).emoji, label: labels.get(id).label }));
         const summary = health.summarize(reports, hidden); summary.reports.forEach(row => { row.moved = (moves[row.key] && moves[row.key].cat) || ''; });
-        return json({ ...summary, categories, stations, updatedAt: number(cache && cache.updatedAt), checkedAt: number(cache && (cache.checkedAt || cache.updatedAt)), dropped: cache && Array.isArray(cache.dropped) ? cache.dropped.slice(0, 40).map(d => ({ n: String(d.n || ''), u: String(d.u || ''), at: number(d.at), key: health.radioKey(d.u) })) : [] });
+        return json({ ...summary, categories, stations, outdated: !cache || cache.v !== radio.BUILDER_VERSION, updatedAt: number(cache && cache.updatedAt), checkedAt: number(cache && (cache.checkedAt || cache.updatedAt)), dropped: cache && Array.isArray(cache.dropped) ? cache.dropped.slice(0, 40).map(d => ({ n: String(d.n || ''), u: String(d.u || ''), at: number(d.at), key: health.radioKey(d.u) })) : [] });
       }
       if (op === 'stations') {   // every station of the list once, with the categories it is in, whether it is moved / hidden (the station manager)
         const [cache, hidden, moves] = await Promise.all([store.getRadioCache().catch(() => null), store.getRadioHidden(), store.getRadioMoves()]);
         const radio = require('./radio'), index = radio.stationIndex(cache), labels = new Map(((cache && cache.cats) || []).map(cat => [cat.id, cat]));
         const stations = [...index.values()].map(row => ({ key: row.key, n: row.n, c: row.c, b: row.b, cc: row.cc, cats: row.cats, moved: (moves[row.key] && moves[row.key].cat) || '', hidden: Boolean(hidden[row.key]) })).sort((a, b) => a.n.localeCompare(b.n));
-        return json({ stations, categories: radio.MOVE_TARGETS.filter(id => labels.has(id)).map(id => ({ id, emoji: labels.get(id).emoji, label: labels.get(id).label })) });
+        return json({ outdated: !cache || cache.v !== radio.BUILDER_VERSION, stations, categories: radio.MOVE_TARGETS.filter(id => labels.has(id)).map(id => ({ id, emoji: labels.get(id).emoji, label: labels.get(id).label })) });
       }
-      if (!/^[0-9a-f]{16}$/.test(key)) return json({ error: 'Bad request.' }, 400);
+      if (!/^[0-9a-f]{16}$/.test(key)) return json({ error: 'Bad station key.' }, 400);
       if (op === 'unmove') { await store.setRadioMove(key, null); return json({ ok: true }); }
       if (op === 'move') {
-        const radio = require('./radio'), cat = String(input.cat || ''); if (!radio.MOVE_TARGETS.includes(cat)) return json({ error: 'Bad request.' }, 400);
+        const radio = require('./radio'), cat = String(input.cat || ''); if (!radio.MOVE_TARGETS.includes(cat)) return json({ error: 'Bad category.' }, 400);
         const row = radio.stationIndex(await store.getRadioCache().catch(() => null)).get(key); if (!row) return json({ error: 'Station not found.' }, 404);
         await store.setRadioMove(key, { u: row.u, n: String(row.n || '').slice(0, 60), cat, at: Date.now() }); return json({ ok: true });
       }
@@ -590,7 +590,7 @@ const accountHandler = async event => {
       if (!found || !found.u) return json({ error: 'Station not found.' }, 404);
       if (op === 'hide') { await store.setRadioHidden(key, { u: String(found.u), n: String(found.n || '').slice(0, 60), at: Date.now() }); return json({ ok: true }); }
       if (op === 'test') return json({ test: await require('./radio').diagnose(String(found.u)) });
-      return json({ error: 'Bad request.' }, 400);
+      return json({ error: 'Unknown operation.' }, 400);
     }
     return json({ error: 'Unknown action.' }, 400);
   } catch (error) { console.error(error); return json({ error: 'Server temporarily unavailable.' }, 500); }

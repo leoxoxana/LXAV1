@@ -5908,3 +5908,33 @@ html body:not(#_):not(#__):not(#___):not(#____) .radio-moved-tag{display:inline-
 html body:not(#_):not(#__):not(#___):not(#____) .radio-station.is-hidden .player-row-info{opacity:.5!important}
 html body:not(#_):not(#__):not(#___):not(#____) .radio-station.is-hidden .player-row-info .radio-hidden-tag{opacity:1!important}
 html body:not(#_):not(#__):not(#___):not(#____) .radio-station-actions button.radio-show{border-color:var(--lxa-cyan-400)!important;color:var(--lxa-cyan-400)!important}
+
+/* ===== Page lock + pinch zoom: zoomed in, the fingers may pan and pinch back out even while the page is locked ===== */
+html.lxa-zoomed body.scroll-locked,html.lxa-zoomed body.scroll-locked *{touch-action:auto!important}
+html.lxa-zoomed.scroll-locked,html.lxa-zoomed.scroll-locked body{overscroll-behavior:auto!important}
+
+/* ===== Admin > RADIO v2: emoji-only icon buttons, emoji chips to move a station ===== */
+html body:not(#_):not(#__):not(#___):not(#____) .radio-report{flex-wrap:wrap!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-iconbtn{flex:0 0 auto!important;width:32px!important;height:32px!important;min-height:0!important;padding:0!important;margin:0!important;display:flex!important;align-items:center!important;justify-content:center!important;border:1px solid var(--lxa-text-muted)!important;border-radius:8px!important;background:var(--lxa-bg-1)!important;color:var(--lxa-text-strong)!important;font:16px/1 Arial,sans-serif!important;cursor:pointer!important;touch-action:manipulation!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-iconbtn:hover,html body:not(#_) .radio-iconbtn:focus-visible,html body:not(#_) .radio-iconbtn[aria-expanded=true]{border-color:var(--lxa-cyan-400)!important;box-shadow:0 0 8px rgba(92,157,255,.33)!important;outline:none!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-iconbtn.radio-show{border-color:var(--lxa-cyan-400)!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-move-panel{flex:0 0 100%!important;width:100%!important;display:flex!important;flex-wrap:wrap!important;gap:6px!important;padding:8px 0 2px!important;border-top:1px solid rgba(190,140,255,.25)!important;margin-top:6px!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-move-panel[hidden]{display:none!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-chip{flex:0 0 auto!important;width:38px!important;height:38px!important;min-height:0!important;padding:0!important;margin:0!important;display:flex!important;align-items:center!important;justify-content:center!important;border:1px solid var(--lxa-text-muted)!important;border-radius:10px!important;background:var(--lxa-bg-1)!important;font:20px/1 Arial,sans-serif!important;cursor:pointer!important;touch-action:manipulation!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-chip.auto{border-color:var(--lxa-cyan-400)!important;background:rgba(32,213,216,.12)!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-chip.on{background:linear-gradient(180deg,#ff7a45,#e8442a)!important;border-color:rgba(255,160,120,.9)!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-chip:disabled{opacity:.5!important}
+
+/* ===== Touch: no "stuck hover" ===== */
+/* iOS keeps :hover on the last tapped element until something else is tapped: the lock / ID / flag buttons stayed enlarged and glowing after a tap, which looks broken. Only real pointers (mouse) get the hover effect. */
+@media (hover:none){
+  html body:not(#_):not(#__):not(#___):not(#____) #scrollLock:hover,
+  html body:not(#_):not(#__):not(#___):not(#____) #headerActions .account-button:hover,
+  html body:not(#_):not(#__):not(#___):not(#____) #headerActions .language-toggle:hover,
+  html body:not(#_):not(#__):not(#___):not(#____) #language:hover,
+  html body:not(#_):not(#__):not(#___):not(#____) #languageMenu button:hover,
+  html body:not(#_):not(#__):not(#___):not(#____) .kofi-goal-bar:hover{transform:none!important;box-shadow:none!important}
+  html body:not(#_):not(#__):not(#___):not(#____) #scrollLock:hover:not([aria-pressed=true]),
+  html body:not(#_):not(#__):not(#___):not(#____) #headerActions .account-button:hover,
+  html body:not(#_):not(#__):not(#___):not(#____) #headerActions .language-toggle:hover{background:transparent!important;color:var(--lxa-text)!important}
+}
