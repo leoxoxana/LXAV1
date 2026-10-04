@@ -164,7 +164,7 @@ describe('handler: POST report, GET with the hide list', () => {
     expect((await post(rep({ u: 'https://evil.example.com/x' }))).statusCode).toBe(404);
     expect((await post('not json')).statusCode).toBe(400);
     expect((await post(rep({ kind: 'nope' }))).statusCode).toBe(400);
-    expect((await post('x'.repeat(3000))).statusCode).toBe(413);
+    expect((await post('x'.repeat(7000))).statusCode).toBe(413);
     expect(Object.keys(storage.__reports())).toHaveLength(0);
   });
   test('the 31st report of one device within an hour gets 429', async () => {
