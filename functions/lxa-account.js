@@ -130,7 +130,15 @@ async function read(id) { const accounts = await getAccounts(); const entry = fi
 // common case (double-click/double-tap) by disabling the spin button for
 // the duration of a request (see renderer.js lxaAccountSpinV76).
 // Node key = "<id> : <name>" (e.g. "25 : ANA") and is refreshed whenever the ID or name changes (or a hand-edited / legacy `account:N` node is saved).
+// The leaderboard is rebuilt from the REAL accounts when it is read (see the leaderboard action). Reading every account on each request would be heavy (the game refreshes the rank after spins),
+// so the account list is kept for 5 seconds in memory; every write made by this instance drops it at once, other instances see a change within 5 seconds.
+let accountsCache = null;
+const readAccountsCached = async () => { if (accountsCache && Date.now() - accountsCache.at < 5000) return accountsCache.data; const data = await getAccounts(); accountsCache = { at: Date.now(), data }; return data; };
+const dropAccountsCache = () => { accountsCache = null; };
 async function save(account, keepStamp) {
+  try { return await saveAccountNode(account, keepStamp); } finally { dropAccountsCache(); }
+}
+async function saveAccountNode(account, keepStamp) {
   if (!keepStamp) account.updatedAt = Date.now();
   const ops = Array.isArray(account.__sessionOps) ? account.__sessionOps.slice() : [];
   const plain = current => {
@@ -447,10 +455,24 @@ const accountHandler = async event => {
       await saveLeaderboard({});
       return json({ ok: true });
     }
-    if (action === 'leaderboard') { const level = difficulty(input.difficulty || 1), boards = await getLeaderboard(), records = boards[`leaderboard:profile-${DIFFICULTY_PROFILE_VERSION}:${level}`] || []; records.sort((a, b) => number(b.score) - number(a.score) || number(a.updatedAt) - number(b.updatedAt)); let position = input.id ? records.findIndex(row => Number(row.id) === Number(input.id)) + 1 : 0;
-      // An account with no record on this board yet (it has not spun at this difficulty since the profile version changed) used to get position null, which the
-      // game showed as "#-". Rank it by its own score among the existing records instead (ties: the older record stays ahead).
-      if (!position && input.id) { try { const own = await read(input.id); if (own) { const ownScore = number(own.difficultyData?.[level]?.score), ownAt = number(own.updatedAt, Date.now()); position = records.filter(row => number(row.score) > ownScore || (number(row.score) === ownScore && number(row.updatedAt) <= ownAt)).length + 1; } } catch (error) { /* keep null */ } } return json({ difficulty: level, records: records.slice(0, 10).map(({ name, score }) => ({ name, score })), yourPosition: position || null }); }
+    // LEADERBOARD = cumulative NET result (payouts minus stakes) per difficulty, from the account itself (difficultyData[level].score); ties: whoever reached the score first.
+    // The stored board is only a list of account ids; names and scores are read from the real accounts here, so a renamed account shows its real name, a deleted account (or a row left behind by a
+    // console edit) disappears, a stale score is corrected, and the position is always the index in the list that is shown.
+    if (action === 'leaderboard') {
+      const level = difficulty(input.difficulty || 1), boards = await getLeaderboard(), stored = boards[`leaderboard:profile-${DIFFICULTY_PROFILE_VERSION}:${level}`] || [];
+      let byId = null; try { byId = new Map(); for (const acc of Object.values((await readAccountsCached()) || {})) if (acc && acc.id !== undefined && acc.id !== null) byId.set(Number(acc.id), acc); } catch (error) { byId = null; }   // accounts unreadable: show the stored rows as they are
+      const seen = new Set(), records = [];
+      for (const row of stored) {
+        const id = Number(row.id); if (seen.has(id)) continue;
+        if (byId) { const acc = byId.get(id); if (!acc || LEADERBOARD_EXCLUDED_NAMES.has(String(acc.name || '').toUpperCase())) continue; seen.add(id); records.push({ id, name: acc.name, score: number(acc.difficultyData?.[level]?.score), updatedAt: number(row.updatedAt) || number(acc.updatedAt) }); }
+        else { seen.add(id); records.push({ id, name: row.name, score: number(row.score), updatedAt: number(row.updatedAt) }); }
+      }
+      records.sort((a, b) => number(b.score) - number(a.score) || number(a.updatedAt) - number(b.updatedAt));
+      let position = input.id ? records.findIndex(row => Number(row.id) === Number(input.id)) + 1 : 0;
+      // An account that is not on this board yet (it has not spun at this difficulty): ranked by its own score among the rows (ties: the older row stays ahead).
+      if (!position && input.id) { try { const own = (byId && byId.get(Number(input.id))) || await read(input.id); if (own) { const ownScore = number(own.difficultyData?.[level]?.score), ownAt = number(own.updatedAt, Date.now()); position = records.filter(row => number(row.score) > ownScore || (number(row.score) === ownScore && number(row.updatedAt) <= ownAt)).length + 1; } } catch (error) { /* keep null */ } }
+      return json({ difficulty: level, records: records.slice(0, 10).map(({ name, score }) => ({ name, score })), yourPosition: position || null });
+    }
     // v150: admin-only player management (USERS, deferred from v143). Every
     // action here re-reads the CALLER's account fresh from Firebase and
     // requires role:"admin" + safeWord, exactly like the RTP/leaderboard
@@ -523,7 +545,7 @@ const accountHandler = async event => {
       { const denied = await checkSafeWord(admin, input.safeWord); if (denied) return denied; }
       const target = await read(input.playerId); if (!target) return json({ error: 'Player not found.' }, 404);
       if (Number(target.id) === Number(admin.id)) return json({ error: 'Cannot delete your own account.' }, 400);
-      await updateAccount(target.__key || accountKey(target.id, target.name), () => null);
+      await updateAccount(target.__key || accountKey(target.id, target.name), () => null); dropAccountsCache();
       const boards = await getLeaderboard({ strict: true });
       let changed = false;
       for (const key of Object.keys(boards)) {

@@ -313,7 +313,7 @@ accountPanel.querySelector('[data-account-action="toggle-safe"]')?.addEventListe
   else{throw new Error(x.hint)}
 }else if(action==='reauth'){const safeWord=String(data.safeWord||'').trim();if(!safeWord)throw new Error(x.hint);const result=await lxaRequest('login',{id:lxaAccount.id,safeWord});lxaSetSafe(safeWord);lxaHydrate(result.account,result.token);renderAccountPanel('home',x.loginOk)}else if(action==='settings'){const result=await lxaRequest('update',{id:lxaAccount.id,name:data.name,safeWord:data.currentSafeWord,newSafeWord:data.newSafeWord});lxaSetSafe((data.newSafeWord||data.currentSafeWord).trim());lxaHydrate(result.account,result.token)}else if(action==='rtp-admin'){const payload={id:lxaAccount.id};[1,2,3].forEach(n=>{const raw=String(data[n]||'').trim();if(raw!=='')payload[n]=raw});payload.rtpLinked=data.rtpLinked?'true':'false';payload.rtpRefLevel=String(data.rtpRefLevel||0);const result=await lxaRequest('set-rtp-settings',payload);lxaRtpCache={settings:result.settings,computed:result.computed,defaults:lxaRtpCache?.defaults,bounds:lxaRtpCache?.bounds,customDistribution:lxaRtpCache?.customDistribution};renderAccountPanel('rtp-admin',x.rtpSaved)}else if(action==='jackpot-admin'){const payload={id:lxaAccount.id};payload[`jackpotFreq${data.difficulty}`]=data.multiplier;const result=await lxaRequest('set-rtp-settings',payload);lxaRtpCache={settings:result.settings,defaults:lxaRtpCache?.defaults,bounds:lxaRtpCache?.bounds};renderAccountPanel('jackpot-admin',x.rtpSaved)}else if(action==='wild-admin'){const payload={id:lxaAccount.id,wildChance:data.wildChance,wildPerLevel:data.wildPerLevel,wildCap:data.wildCap,wildCostMult:data.wildCostMult,extraWildFreq:data.extraWildFreq};const result=await lxaRequest('set-rtp-settings',payload);lxaRtpCache={settings:result.settings,defaults:lxaRtpCache?.defaults,bounds:lxaRtpCache?.bounds};renderAccountPanel('wild-admin',x.rtpSaved)}else if(action==='payout-admin'){const payload={id:lxaAccount.id,payoutMult:data.payoutMult,jackpotValueMult:data.jackpotValueMult};const result=await lxaRequest('set-rtp-settings',payload);lxaRtpCache={settings:result.settings,defaults:lxaRtpCache?.defaults,bounds:lxaRtpCache?.bounds};renderAccountPanel('payout-admin',x.rtpSaved)}else if(action==='custom-admin'){const buckets={};[0,3,4,5,6,7,8,9,10].forEach(k=>buckets[k]=data[`b${k}`]);const result=await lxaRequest('set-custom-distribution',{id:lxaAccount.id,difficulty:data.difficulty,buckets});lxaRtpCache=await lxaRequest('get-rtp-settings',{});renderAccountPanel('custom-admin',x.customSaved)}else if(action==='player-edit'){const payload={id:lxaAccount.id,playerId:lxaEditPlayerId};const newId=String(data.newId||'').trim();if(newId&&Number(newId)!==lxaEditPlayerId)payload.newId=newId;const newName=String(data.newName||'').trim();if(newName)payload.newName=newName;const newSafeWord=String(data.newSafeWord||'').trim();if(newSafeWord)payload.newSafeWord=newSafeWord;const result=await lxaRequest('admin-update-player',payload);lxaPlayersCache=(lxaPlayersCache||[]).map(p=>Number(p.id)===lxaEditPlayerId?result.player:p);lxaEditPlayerId=result.player.id;renderAccountPanel('player-edit',x.saved)}}catch(error){renderAccountPanel(view,error.message)}}}
 function lxaSetupAccountButton(){const host=document.querySelector('#headerActions')||document.querySelector('.topbar');if(!host||document.querySelector('#accountButton'))return;const button=document.createElement('button');button.id='accountButton';button.className='account-button';button.type='button';button.textContent='🎫';button.title=accountText.de.account;button.onclick=()=>renderAccountPanel('home');host.prepend(button)}
-function lxaSetupLeaderboard(){const bottomGrid=document.querySelector('.bottom-grid');if(!bottomGrid||document.querySelector('#leaderboardPanel'))return;const panel=document.createElement('section');panel.id='leaderboardPanel';panel.className='leaderboard-panel';panel.innerHTML='<div class="leaderboard-head"><span id="leaderboardTitle"></span><small id="leaderboardDifficulty"></small></div><nav id="leaderboardTabs" class="leaderboard-tabs" aria-label="Difficulty leaderboard"></nav><ol id="leaderboardRows" class="leaderboard-rows"></ol><div id="leaderboardPosition" class="leaderboard-position"></div>';bottomGrid.parentNode.insertBefore(panel,bottomGrid);document.querySelector('#chance').addEventListener('input',()=>{lxaLeaderboardLevel=chance+1;renderLeaderboard()})}
+function lxaSetupLeaderboard(){const bottomGrid=document.querySelector('.bottom-grid');if(!bottomGrid||document.querySelector('#leaderboardPanel'))return;const panel=document.createElement('section');panel.id='leaderboardPanel';panel.className='leaderboard-panel';panel.innerHTML='<div class="leaderboard-head"><span id="leaderboardTitle"></span><small id="leaderboardDifficulty"></small></div><nav id="leaderboardTabs" class="leaderboard-tabs" aria-label="Difficulty leaderboard"></nav><ol id="leaderboardRows" class="leaderboard-rows"></ol><p id="leaderboardHint" class="leaderboard-hint"></p><div id="leaderboardPosition" class="leaderboard-position"></div>';bottomGrid.parentNode.insertBefore(panel,bottomGrid);document.querySelector('#chance').addEventListener('input',()=>{lxaLeaderboardLevel=chance+1;renderLeaderboard()})}
 async function renderLeaderboard(){lxaSetupLeaderboard();const x=lxaCopy(),level=chance+1;const title=document.querySelector('#leaderboardTitle'),difficulty=document.querySelector('#leaderboardDifficulty'),tabs=document.querySelector('#leaderboardTabs'),rows=document.querySelector('#leaderboardRows'),position=document.querySelector('#leaderboardPosition');if(!title||!tabs)return;title.textContent=x.leaderboard;difficulty.textContent=`${level}/7`;tabs.innerHTML=Array.from({length:7},(_,i)=>`<button class="${i+1===level?'active':''}" data-level="${i+1}">${i+1}/7</button>`).join('');tabs.querySelectorAll('button').forEach(tab=>tab.onclick=()=>{chance=Number(tab.dataset.level)-1;refreshChance();renderLeaderboard();lxaSaveState()});rows.innerHTML=`<li class="leaderboard-loading">…</li>`;try{const query=new URLSearchParams({action:'leaderboard',difficulty:String(level)});if(lxaAccount)query.set('id',String(lxaAccount.id));const response=await fetch(`${LXA_API}?${query}`);const data=await response.json();if(!response.ok)throw new Error(data.error);rows.innerHTML=data.records?.length?data.records.map((record,i)=>`<li><b>${i+1}</b><span>${lxaEsc(record.name)}</span><strong>${Number(record.score||0).toLocaleString(lang==='en'?'en-US':'de-DE')}</strong></li>`).join(''):`<li class="leaderboard-empty">${x.empty}</li>`;position.textContent=lxaAccount&&data.yourPosition?`${x.your}: #${data.yourPosition}`:''}catch(error){rows.innerHTML=`<li class="leaderboard-empty">${x.offline}</li>`;position.textContent=''}}
 // v244: called once on page load. Restores the account visually using only
 // the cached id (the password, if remembered, comes from lxa-safe-v1, see lxaSetSafe) via
@@ -500,9 +500,8 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
   let rankTimer = null;
   // After a spin the leaderboard + "rank #" are re-read in the background (no page reload, no flicker).
   function scheduleRankRefresh() {
-    if (!lxaAccount) return;
-    clearTimeout(rankTimer);
-    rankTimer = setTimeout(() => { if (!spinning && lxaAccount) renderLeaderboard(true); }, 1500);
+    if (!lxaAccount || rankTimer) return;   // already scheduled: AUTO spins every second or two and used to push a debounced refresh back for ever
+    rankTimer = setTimeout(() => { rankTimer = null; if (lxaAccount) renderLeaderboard(true); }, 1800);
   }
   function fitMissionTitle() {
     const head = document.querySelector('.jackpot-target .target-head');
@@ -784,7 +783,7 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
     // meant to be read before the totals now. This file only ever targets
     // these by id, so the content logic below is unchanged; only the
     // markup order (and the CSS layout built around it) moved.
-    const totalHtml = `<span class="board-total"><span>${({de:'BRUTTO',ro:'BRUT',en:'GROSS'}[lang] || 'GROSS')}${wild}</span><b>+${euro(spin.totalPayout)}</b></span><span class="board-total net-result ${spin.netResult < 0 ? 'loss' : spin.netResult > 0 ? 'profit' : 'even'}"><span>${T118('net')}</span><b>${signedEuroV112(spin.netResult)}</b></span>`;
+    const totalHtml = `<span class="board-total net-result ${spin.netResult < 0 ? 'loss' : spin.netResult > 0 ? 'profit' : 'even'}"><span>${T118('net')}</span><b>${signedEuroV112(spin.netResult)}</b></span><span class="board-total gross-result"><span>${({de:'BRUTTO',ro:'BRUT',en:'GROSS'}[lang] || 'GROSS')}${wild}</span><b>+${euro(spin.totalPayout)}</b></span>`;   // one row: NETTO first, BRUTTO second (same size); colours come from the classes, not from the position
     if (!winningLines.length && !spin.jackpotPayout) {
       $('#boardDetails').innerHTML = `<span>${T118('noWinNext')}${wild}</span>`;
       $('#boardSummary').innerHTML = '';
@@ -796,9 +795,8 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
       // at a readable size. This short form fits 5 chips on one row without
       // shrinking the font into illegibility or needing horizontal scroll.
       $('#boardDetails').innerHTML = winningLines.map(line => `<div class="${line.hits === 10 && !line.wild ? 'jackpot-result' : ''}"><span>L${line.index + 1} · ${line.hits}/10</span><b>+${euro(line.amount)}</b></div>`).join('');
-      // totalHtml (GEWINN BRUTTO/NETTO) must stay first: .board-total:first-child
-      // carries the gold GEWINN BRUTTO color rule below, so putting jackpot/reset
-      // before it would silently steal that styling on any jackpot spin.
+      // totalHtml (NETTO + BRUTTO) stays first in the summary; the colours are tied to .net-result / .gross-result (layout-fix.css),
+      // so the jackpot / reset blocks after it can never steal them.
       $('#boardSummary').innerHTML = totalHtml + jackpot + reset;
     }
     $('#winBoard').classList.add('show');
@@ -1011,7 +1009,8 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
       lastSpin: spin,
       spinHistory: [spin, ...state.spinHistory].slice(0, 50)
     });
-    lxaAccount = response.account;
+    const keptPosition = lxaAccount && lxaAccount.position;   // the server's account has no rank: keep the last known one until the leaderboard answers (no "#—" flicker after every spin)
+    lxaAccount = response.account; if (keptPosition) lxaAccount.position = keptPosition;
     lxaStore();
     return { state: next, spin };
   }
@@ -1338,6 +1337,7 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
     const title = $('#leaderboardTitle'), difficulty = $('#leaderboardDifficulty'), tabs = $('#leaderboardTabs'), rows = $('#leaderboardRows'), position = $('#leaderboardPosition');
     if (!title || !tabs) return;
     title.textContent = T118('leaderboard');
+    const hint = $('#leaderboardHint'); if (hint) hint.textContent = ({ de: 'Rang = Gesamt-NETTO pro Stufe (Gewinn minus Einsatz, alle Runden)', ro: 'Loc = NETTO total pe nivel (câștig minus miză, toate rundele)', en: 'Rank = total NET per level (payout minus stake, all rounds)' }[lang] || '');
     difficulty.textContent = `${level}/3`;
     tabs.innerHTML = Array.from({ length: 3 }, (_, index) => `<button class="${index + 1 === level ? 'active' : ''}" data-level="${index + 1}">${index + 1}/3</button>`).join('');
     tabs.querySelectorAll('button').forEach(tab => tab.onclick = () => { chance = Number(tab.dataset.level) - 1; gameState.difficulty = chance + 1; persist(); refreshChance(); renderLeaderboard(); });

@@ -1,4 +1,5 @@
-// The player's rank on the leaderboard: by id when the account has a record, otherwise ranked by its own score (it used to come back null -> "#-").
+// The player's rank on the leaderboard: by id when the account has a row, otherwise ranked by its own score (it used to come back null -> "#-").
+// The board is rebuilt from the real accounts when it is read: every row needs an existing account (names and scores come from the account).
 const BOARD = 'leaderboard:profile-3:1';
 jest.mock('./functions/firebase-storage.js', () => {
   let accounts = {};
@@ -21,12 +22,15 @@ async function setup() {
   const { handler } = require('./functions/lxa-account.js');
   const call = async (action, data) => { const r = await handler({ httpMethod: 'POST', headers: { 'x-vercel-forwarded-for': '10.8.0.' + (ip++ & 255) }, body: JSON.stringify({ action, ...data }) }); return { status: r.statusCode, body: JSON.parse(r.body) }; };
   const made = await call('create', { name: 'Rank' + ip });
+  // the three rows of the board belong to real accounts (their name and score are read from them)
+  const accounts = storage.__accounts();
+  [[901, 'A', 50], [902, 'B', 10], [903, 'C', -5]].forEach(([id, name, score]) => { accounts[id + ' : ' + name] = { id, name, role: 'user', createdAt: id, updatedAt: id, difficultyData: { 1: { score, spins: 1, wins: 0 } } }; });
   return { call, storage, id: made.body.account.id };
 }
 
-test('an account without a record is ranked by its own score among the records', async () => {
+test('an account without a row is ranked by its own score among the rows', async () => {
   const t = await setup();
-  const acc = Object.values(t.storage.__accounts())[0];
+  const acc = Object.values(t.storage.__accounts()).find(a => a.id === t.id);
   acc.difficultyData = { 1: { score: 20, spins: 3, wins: 1 } };
   const r = await t.call('leaderboard', { difficulty: 1, id: t.id });
   expect(r.status).toBe(200);
@@ -37,10 +41,12 @@ test('an account without a record is ranked by its own score among the records',
   expect((await t.call('leaderboard', { difficulty: 1, id: t.id })).body.yourPosition).toBe(1);
 });
 
-test('an account that has a record keeps the position found by its id, and a request without an id has none', async () => {
+test('an account that has a row keeps the position found by its id, and a request without an id has none', async () => {
   const t = await setup();
   const board = await t.storage.getLeaderboard();
-  board[BOARD][1].id = t.id;                    // the record of B now belongs to this account
+  board[BOARD][1].id = t.id;                    // the row of B now belongs to this account
+  const acc = Object.values(t.storage.__accounts()).find(a => a.id === t.id);
+  acc.difficultyData = { 1: { score: 10, spins: 2, wins: 1 } };
   const r = await t.call('leaderboard', { difficulty: 1, id: t.id });
   expect(r.body.yourPosition).toBe(2);
   expect((await t.call('leaderboard', { difficulty: 1 })).body.yourPosition).toBeNull();
