@@ -5986,3 +5986,5 @@ html body:not(#_):not(#__):not(#___):not(#____) .radio-find{display:block!import
 html body:not(#_):not(#__):not(#___):not(#____) .radio-find select,html body:not(#_):not(#__):not(#___):not(#____) .radio-find input{max-width:100%!important;text-overflow:ellipsis!important}
 /* the station list always has the same height (empty, short or long list, any category): a list that shrinks made the browser clamp the scroll position and the page jumped up */
 html body:not(#_):not(#__):not(#___):not(#____) .radio-list{min-height:min(40vh,300px)!important}
+/* phones: a lower station list (about 200 px), so the panel pushes the Ko-fi strip less far down */
+@media (max-width:700px){html body:not(#_):not(#__):not(#___):not(#____) .radio-list{max-height:min(30vh,200px)!important;min-height:min(30vh,200px)!important}}
