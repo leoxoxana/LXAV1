@@ -396,15 +396,9 @@ describe('stations of the players: submit (validated by the server, saved automa
     for (let i = 0; i < 199; i++) await storage.bumpSuggestDay(new Date().toISOString().slice(0, 10), 200);
     expect(JSON.parse((await suggest({ u: 'https://flood.example.ro/s', dev: 'suggestdevice0007' })).body)).toMatchObject({ ok: true, queued: false, note: 'day-limit' });   // he can still play it, it just does not reach the owner today
   });
-  test('GET ?resolve= answers with the resolver (stubbed here), no-store, and is limited to 12 per hour per visitor', async () => {
-    await stored(); radio.__setResolver(async input => ({ ok: true, url: input, name: 'X', codec: 'MP3' }));
-    try {
-      const res = await radio.handler({ httpMethod: 'GET', queryStringParameters: { resolve: 'https://a.example.ro/s' }, headers: { 'x-forwarded-for': '1.2.3.4' } });
-      expect(res.statusCode).toBe(200); expect(res.headers['cache-control']).toBe('no-store'); expect(JSON.parse(res.body)).toMatchObject({ ok: true, url: 'https://a.example.ro/s' });
-      let last; for (let i = 0; i < 12; i++) last = await radio.handler({ httpMethod: 'GET', queryStringParameters: { resolve: 'https://a.example.ro/s' }, headers: { 'x-forwarded-for': '1.2.3.4' } });
-      expect(last.statusCode).toBe(429);
-      expect((await radio.handler({ httpMethod: 'GET', queryStringParameters: { resolve: 'https://a.example.ro/s' }, headers: { 'x-forwarded-for': '5.6.7.8' } })).statusCode).toBe(200);
-    } finally { radio.__setResolver(null); }
+  test('the old GET ?resolve= endpoint is gone: one validation path only (POST submit), a GET with it just serves the list', async () => {
+    await stored(); const res = await radio.handler({ httpMethod: 'GET', queryStringParameters: { resolve: 'https://a.example.ro/s' }, headers: { 'x-forwarded-for': '1.2.3.4' } });
+    expect(res.statusCode).toBe(200); expect(JSON.parse(res.body)).toHaveProperty('cats'); expect(JSON.parse(res.body)).not.toHaveProperty('url'); expect(radio.__setResolver).toBeUndefined();
   });
   describe('admin 📨', () => {
     let call, key;
@@ -597,6 +591,13 @@ describe('player submission → admin → public: the server validates, saves au
       urls.forEach((u, i) => { storage.__customs()[health.radioKey(u)] = { u, n: 'S' + i, c: 'MP3', b: 128, cat: 'pop', at: 1, health: i < 4 ? { status: 'OK', at: 5000 + i } : undefined }; });
       const seen = []; radio.__setValidator(async u => { seen.push(u); return verdictOK(u); });
       await radio.healthSweep(storage, { max: 8 }); expect(seen).toHaveLength(8); expect(seen.some(u => /s[0-3]\./.test(u))).toBe(false);   // the 4 stations checked most recently wait for the next run
+    });
+    test('the public cron URL cannot be used to hammer the stations: one that was checked within the last 6 hours is skipped by the cron sweep (the admin button always checks)', async () => {
+      const A = 'https://fresh.example.ro/s', B = 'https://old.example.ro/s';
+      storage.__customs()[health.radioKey(A)] = { u: A, n: 'Fresh', c: 'MP3', b: 128, cat: 'pop', at: 1, health: { status: 'OK', at: Date.now() - 3600 * 1000 } }; storage.__customs()[health.radioKey(B)] = { u: B, n: 'Old', c: 'MP3', b: 128, cat: 'pop', at: 1, health: { status: 'OK', at: Date.now() - 7 * 3600 * 1000 } };
+      const seen = []; radio.__setValidator(async u => { seen.push(u); return verdictOK(u); });
+      await radio.healthSweep(storage, { max: 8, minAgeMs: 6 * 3600 * 1000 }); expect(seen).toEqual([B]);
+      seen.length = 0; await radio.healthSweep(storage, { max: 8 }); expect(seen.sort()).toEqual([A, B]);
     });
   });
 });

@@ -394,8 +394,8 @@ async function handleSubmit(body, event, storage) {
   } catch (error) { return reply({ error: 'Not saved.' }, 503, { 'cache-control': 'no-store' }); }
 }
 // health of the APPROVED stations of players: checked in small batches (oldest check first), the result is written to the station (OK / DEGRADED / OFFLINE); nothing is ever deleted or hidden by this
-async function healthSweep(storage, { max = 8, budgetMs = 25000, durationMs = 3000, only = '' } = {}) {
-  const started = Date.now(), customs = Object.entries((await storage.getRadioCustoms()) || {}).filter(([key, v]) => v && v.u && (!only || key === only));
+async function healthSweep(storage, { max = 8, budgetMs = 25000, durationMs = 3000, only = '', minAgeMs = 0 } = {}) {
+  const started = Date.now(), customs = Object.entries((await storage.getRadioCustoms()) || {}).filter(([key, v]) => v && v.u && (!only || key === only) && (!minAgeMs || started - ((v.health && v.health.at) || 0) >= minAgeMs));   // the public cron URL cannot be used to hammer the stations: one that was checked in the last 6 hours is skipped
   customs.sort((a, b) => ((a[1].health && a[1].health.at) || 0) - ((b[1].health && b[1].health.at) || 0));
   const results = [], queue = customs.slice(0, max);
   const worker = async () => {
@@ -425,23 +425,16 @@ async function handleReport(event, storage) {
   return reply({ ok: true }, 200, { 'cache-control': 'no-store' });
 }
 
-let resolver = custom.resolveStation;   // replaceable in tests (no network)
-exports.__setResolver = fn => { resolver = fn || custom.resolveStation; };
 exports.handler = async event => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'Content-Type' }, body: '' };
   if (event.httpMethod !== 'GET' && event.httpMethod !== 'POST') return reply({ error: 'Method not allowed.' }, 405);
   let storage = null; try { storage = require('./firebase-storage'); } catch (error) { storage = null; }
   if (event.httpMethod === 'POST') return handleReport(event, storage);
   const query = event.queryStringParameters || {};
-  if (query.resolve !== undefined) {   // GET ?resolve=<what the player pasted>: a playlist / page / stream -> a stream address that plays (guarded: public addresses only), 12 per hour per visitor
-    const headers = event.headers || {}, who = String(headers['x-vercel-forwarded-for'] || headers['x-forwarded-for'] || headers['X-Forwarded-For'] || 'anon').split(',')[0].trim();
-    if (!reports.allow('res' + who, Date.now(), 12)) return reply({ ok: false, why: 'limit' }, 429, { 'cache-control': 'no-store' });
-    try { return reply(await resolver(String(query.resolve)), 200, { 'cache-control': 'no-store' }); } catch (error) { return reply({ ok: false, why: 'error' }, 200, { 'cache-control': 'no-store' }); }
-  }
   try {
     const { data, stale, rechecked } = await getList({ refresh: String(query.refresh || '') === '1', recheck: String(query.recheck || '') === '1', storage });
     const state = await servingState(storage);
-    if (String(query.refresh || '') === '1' && storage) { try { await healthSweep(storage, { max: 8, budgetMs: 20000 }); } catch (error) { /* the list is served anyway */ } }   // the daily cron also checks the approved stations of players
+    if (String(query.refresh || '') === '1' && storage) { try { await healthSweep(storage, { max: 8, budgetMs: 20000, minAgeMs: 6 * 3600 * 1000 }); } catch (error) { /* the list is served anyway */ } }   // the daily cron also checks the approved stations of players
     return reply({ ...servedList(data, state), stale }, 200, { 'cache-control': rechecked ? 'no-store' : stale ? 'public, s-maxage=60' : 'public, s-maxage=300, stale-while-revalidate=900' });
   } catch (error) {
     return reply({ error: 'Radio list temporarily unavailable.' }, 503, { 'cache-control': 'no-store' });
