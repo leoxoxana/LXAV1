@@ -5938,3 +5938,6 @@ html body:not(#_):not(#__):not(#___):not(#____) .radio-chip:disabled{opacity:.5!
   html body:not(#_):not(#__):not(#___):not(#____) #headerActions .account-button:hover,
   html body:not(#_):not(#__):not(#___):not(#____) #headerActions .language-toggle:hover{background:transparent!important;color:var(--lxa-text)!important}
 }
+
+/* ===== Confirm dialog: ABOVE the account / admin panel (it was under it: z 3000 < 5000, so on some phones the dialog and the panel fought for the screen), light backdrop so the panel stays readable behind it ===== */
+html body:not(#_):not(#__):not(#___):not(#____) .lxa-confirm{z-index:6000!important;background:rgba(4,6,28,.5)!important;-webkit-backdrop-filter:blur(2px)!important;backdrop-filter:blur(2px)!important}
