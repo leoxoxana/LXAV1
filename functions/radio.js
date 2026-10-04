@@ -3,7 +3,7 @@
 // Source: Radio Browser (community directory, no key). Pipeline: Romanian stations per category (tags + name), HTTPS + MP3/AAC + direct url_resolved only,
 // de-duplicated, a REAL reachability probe (first bytes of audio), then - only where Romania has too few working stations - a few top-voted foreign ones.
 // The result is cached in memory and in Firebase (meta/radio), so a Radio Browser outage never empties the player: the last good list is served instead.
-const crypto = require('crypto'), fs = require('fs');
+const crypto = require('crypto'), fs = require('fs'), reports = require('./radio-reports');
 // Version of the list builder = hash of this very file. A list stored (memory / Firebase) by a different version is rebuilt on the next request, so a deploy never keeps serving the list
 // of the previous code for the 12 h freshness window (that is exactly what kept 39 manele stations on the live site after the fix was deployed).
 const BUILDER_VERSION = (() => { try { return crypto.createHash('sha1').update(fs.readFileSync(__filename)).digest('hex').slice(0, 12); } catch (error) { return 'unknown'; } })();
@@ -19,7 +19,9 @@ const PER_CATEGORY_MAX = 60;                  // stations kept per category
 const MIN_PER_CATEGORY = 10;                  // below this many Romanian stations, top foreign ones are added ...
 const MAX_FOREIGN = 6;                        // ... but never more than this many per category
 const PROBE_TIMEOUT_MS = 5000;
-const BUILD_BUDGET_MS = 26000;                // the function may run 30 s (vercel.json): leave room for the Firebase write and the response
+const RECHECK_AFTER_MS = 3 * 3600 * 1000;     // the listed stations are probed again when the last check is older than this (asked by a player, decided here)
+const RECHECK_BUDGET_MS = 22000, RECHECK_MAX_DROP = 0.4;
+const BUILD_BUDGET_MS = 26000;               // the function may run 30 s (vercel.json): leave room for the Firebase write and the response
 
 // not = stations that are about something else (news, talk, religion) never enter a music category
 const CATEGORIES = [
@@ -89,17 +91,34 @@ const explicitManele = station => /manele|manea|trapanel/i.test(station.tags || 
 const topCategories = station => explicitManele(station) && inCategory(CATEGORIES[0], station) ? ['manele', ...topCategoriesBase(station).filter(id => id !== 'manele').slice(0, 1)] : topCategoriesBase(station);
 const topCategoriesBase = station => CATEGORIES.map(category => ({ id: category.id, points: categoryScore(category, station) })).filter(item => item.points > 0).sort((a, b) => b.points - a.points).filter((item, index) => index === 0 || (index === 1 && item.points >= 2)).map(item => item.id);
 
-// real reachability: the stream must answer 2xx with audio bytes (not an HTML error page, not HLS)
-async function probeStream(url, timeoutMs = PROBE_TIMEOUT_MS) {
-  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
+// real reachability: the stream must answer 2xx with audio bytes (not an HTML error page, not HLS) - and it has to do so for TWO kinds of client:
+// this server (plain request) and a phone (iPhone Safari headers: Range, icy-metadata). Some hosts answer a phone with an HTML page or nothing while a plain request works (found on the live list:
+// Radio Pro Manele, Radio Noise Party, Replica Radio Rock, RadioClick): those never reach the player. The phone check runs only after the plain one passed (one connection at a time: tiny hosts limit listeners).
+const PHONE_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
+const SERVER_HEADERS = { 'user-agent': USER_AGENT, 'icy-metadata': '0' }, PHONE_HEADERS = { 'user-agent': PHONE_AGENT, accept: '*/*', range: 'bytes=0-', 'icy-metadata': '1' };
+async function probeOnce(url, timeoutMs, headers) {
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs), started = Date.now();
+  const done = (ok, why) => ({ ok, why, ms: Date.now() - started });
   try {
-    const response = await fetch(url, { signal: controller.signal, headers: { 'user-agent': USER_AGENT, 'icy-metadata': '0' } });
+    const response = await fetch(url, { signal: controller.signal, headers });
     const type = String(response.headers.get('content-type') || '').toLowerCase();
-    if (!response.ok || !/audio|mpeg|aac|ogg|octet-stream/.test(type) || /mpegurl/.test(type)) { try { response.body && response.body.cancel(); } catch (error) { /* ignore */ } return false; }
+    if (!response.ok) { try { response.body && response.body.cancel(); } catch (error) { /* ignore */ } return done(false, 'http ' + response.status); }
+    if (!/audio|mpeg|aac|ogg|octet-stream/.test(type) || /mpegurl/.test(type)) { try { response.body && response.body.cancel(); } catch (error) { /* ignore */ } return done(false, 'type ' + (type || 'none').slice(0, 30)); }
     const reader = response.body.getReader(), { value } = await reader.read();
     try { reader.cancel(); } catch (error) { /* ignore */ }
-    return Boolean(value && value.length > 200);
-  } catch (error) { return false; } finally { clearTimeout(timer); }
+    if (!value || value.length <= 200) return done(false, 'no audio');
+    if (value[0] === 0x3c) return done(false, 'html body');   // "<": a web page behind an audio content-type
+    return done(true, 'ok');
+  } catch (error) { return done(false, error && error.name === 'AbortError' ? 'timeout' : String((error && error.cause && error.cause.code) || (error && error.message) || 'error').slice(0, 40)); } finally { clearTimeout(timer); }
+}
+async function probeStream(url, timeoutMs = PROBE_TIMEOUT_MS) {
+  if (!(await probeOnce(url, timeoutMs, SERVER_HEADERS)).ok) return false;
+  return (await probeOnce(url, timeoutMs, PHONE_HEADERS)).ok;
+}
+// both kinds of request, with the reason: for the admin "test" button
+async function diagnose(url, timeoutMs = PROBE_TIMEOUT_MS) {
+  const server = await probeOnce(url, timeoutMs, SERVER_HEADERS), phone = await probeOnce(url, timeoutMs, PHONE_HEADERS);
+  return { server, phone };
 }
 
 async function radioBrowser(path) {
@@ -182,15 +201,37 @@ async function buildList(deps = {}) {
   return { updatedAt: now(), cats: result };
 }
 
-let memory = null, building = null;
+// RE-CHECK: a station that worked at build time can die hours later (6 of 220 on the live list within a day). Every few hours the listed stations are probed again (the same strict two-client probe,
+// failures get a second try) and the dead ones leave the list; they come back at the next full build if they work again. Nothing is ever ADDED here, and if more than 40 % "died" at once the cause is
+// this server's own network, not the stations: nothing is removed. Stations that could not be probed in time stay.
+async function recheckList(data, deps = {}) {
+  const probe = deps.probe || probeStream, now = deps.now || Date.now, started = now(), overBudget = () => now() - started > RECHECK_BUDGET_MS;
+  const urls = [...new Set(data.cats.flatMap(cat => cat.items.map(item => item.u)))], results = new Map();
+  const run = async (list, width) => { let index = 0; await Promise.all(Array.from({ length: width }, async () => { while (index < list.length && !overBudget()) { const url = list[index++]; results.set(url, await probe(url, PROBE_TIMEOUT_MS)); } })); };
+  await run(urls, 32);
+  await run(urls.filter(url => results.get(url) === false), 8);   // second chance, fewer at a time
+  const dead = new Set(urls.filter(url => results.get(url) === false));
+  if (!dead.size || dead.size > urls.length * RECHECK_MAX_DROP) return { ...data, checkedAt: now() };
+  const names = new Map(); data.cats.forEach(cat => cat.items.forEach(item => { if (dead.has(item.u)) names.set(item.u, item.n); }));
+  const dropped = [...names].map(([u, n]) => ({ n, u, at: now() })).concat(Array.isArray(data.dropped) ? data.dropped : []).slice(0, 40);
+  return { ...data, cats: data.cats.map(cat => ({ ...cat, items: cat.items.filter(item => !dead.has(item.u)) })), checkedAt: now(), dropped };
+}
+
+let memory = null, building = null, rechecking = null;
 const total = data => (data && data.cats ? data.cats.reduce((n, c) => n + c.items.length, 0) : 0);
 async function loadStored(storage) { try { return storage && storage.getRadioCache ? await storage.getRadioCache() : null; } catch (error) { return null; } }
 async function saveStored(storage, data) { try { if (storage && storage.saveRadioCache) await storage.saveRadioCache(data); } catch (error) { /* the list still works from memory */ } }
 
-async function getList({ refresh = false, storage, build = buildList, now = Date.now } = {}) {
+async function getList({ refresh = false, recheck = false, storage, build = buildList, check = recheckList, now = Date.now } = {}) {
   if (!memory) memory = await loadStored(storage);
   const age = memory ? now() - Number(memory.updatedAt || 0) : Infinity;
   const needs = !memory || memory.v !== BUILDER_VERSION || age > MAX_AGE_MS || (refresh && age > MIN_REFRESH_MS);   // a list built by older code (or without a version) is never served as fresh
+  if (!needs && recheck && now() - Number(memory.checkedAt || memory.updatedAt || 0) > RECHECK_AFTER_MS) {   // the server decides, whatever the client asks: nobody can force a re-check more often than this
+    try {
+      if (!rechecking) rechecking = check(memory).then(async data => { memory = data; await saveStored(storage, data); return data; }).finally(() => { rechecking = null; });
+      return { data: await rechecking, stale: false, rechecked: true };
+    } catch (error) { return { data: memory, stale: false }; }
+  }
   if (!needs) return { data: memory, stale: false };
   try {
     if (!building) building = build().then(async data => { if (total(data) < 10) throw new Error('too few stations'); data.v = BUILDER_VERSION; memory = data; await saveStored(storage, data); return data; }).finally(() => { building = null; });
@@ -203,16 +244,45 @@ async function getList({ refresh = false, storage, build = buildList, now = Date
 
 const reply = (body, statusCode = 200, extra = {}) => ({ statusCode, headers: { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', ...extra }, body: JSON.stringify(body) });
 
+// The owner's hide list (admin panel > RADIO): applied when the list is SERVED, so hiding a station needs no rebuild and no deploy. Read from Firebase, kept 30 s in memory.
+let hiddenCache = null;
+async function hiddenKeys(storage, now = Date.now()) {
+  if (hiddenCache && now - hiddenCache.at < 30000) return hiddenCache.keys;
+  let keys = new Set(); try { if (storage && storage.getRadioHidden) keys = new Set(Object.keys((await storage.getRadioHidden()) || {})); } catch (error) { keys = hiddenCache ? hiddenCache.keys : keys; }
+  hiddenCache = { at: now, keys }; return keys;
+}
+const servedList = (data, keys) => {
+  const rest = { ...data }; delete rest.dropped;   // `dropped` is for the admin, players do not need it
+  return keys.size ? { ...rest, cats: rest.cats.map(cat => ({ ...cat, items: cat.items.filter(item => !keys.has(reports.radioKey(item.u))) })) } : rest;
+};
+
+// POST {action:'report'}: a player says a station does not play (automatic after a failure, or the 🚩 button). Only stations of the current list are accepted, so the node count is bounded.
+async function handleReport(event, storage) {
+  const raw = String(event.body || ''); if (raw.length > reports.MAX_BODY) return reply({ error: 'Too large.' }, 413, { 'cache-control': 'no-store' });
+  let body; try { body = JSON.parse(raw || '{}'); } catch (error) { return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' }); }
+  const headers = event.headers || {}, report = body && body.action === 'report' ? reports.cleanReport(body, headers['user-agent'] || headers['User-Agent']) : null;
+  if (!report) return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' });
+  if (!reports.allow(report.dev)) return reply({ error: 'Too many reports.' }, 429, { 'cache-control': 'no-store' });
+  if (!memory) memory = await loadStored(storage);
+  let name = null; for (const cat of (memory && memory.cats) || []) { const hit = cat.items.find(item => item.u === report.u); if (hit) { name = hit.n; break; } }
+  if (name === null) return reply({ error: 'Unknown station.' }, 404, { 'cache-control': 'no-store' });
+  try { const now = Date.now(); await storage.updateRadioReport(reports.radioKey(report.u), current => reports.applyReport(current, report, name, now)); } catch (error) { return reply({ error: 'Report not saved.' }, 503, { 'cache-control': 'no-store' }); }
+  return reply({ ok: true }, 200, { 'cache-control': 'no-store' });
+}
+
 exports.handler = async event => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, OPTIONS' }, body: '' };
-  if (event.httpMethod !== 'GET') return reply({ error: 'Method not allowed.' }, 405);
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'Content-Type' }, body: '' };
+  if (event.httpMethod !== 'GET' && event.httpMethod !== 'POST') return reply({ error: 'Method not allowed.' }, 405);
   let storage = null; try { storage = require('./firebase-storage'); } catch (error) { storage = null; }
+  if (event.httpMethod === 'POST') return handleReport(event, storage);
   try {
-    const { data, stale } = await getList({ refresh: String((event.queryStringParameters || {}).refresh || '') === '1', storage });
-    return reply({ ...data, stale }, 200, { 'cache-control': stale ? 'public, s-maxage=60' : 'public, s-maxage=300, stale-while-revalidate=900' });
+    const query = event.queryStringParameters || {};
+    const { data, stale, rechecked } = await getList({ refresh: String(query.refresh || '') === '1', recheck: String(query.recheck || '') === '1', storage });
+    const keys = await hiddenKeys(storage);
+    return reply({ ...servedList(data, keys), stale }, 200, { 'cache-control': rechecked ? 'no-store' : stale ? 'public, s-maxage=60' : 'public, s-maxage=300, stale-while-revalidate=900' });
   } catch (error) {
     return reply({ error: 'Radio list temporarily unavailable.' }, 503, { 'cache-control': 'no-store' });
   }
 };
-exports.BUILDER_VERSION = BUILDER_VERSION; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
+exports.BUILDER_VERSION = BUILDER_VERSION; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.__resetHidden = () => { hiddenCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
 exports.__resetMemory = () => { memory = null; building = null; };

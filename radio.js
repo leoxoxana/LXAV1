@@ -12,11 +12,11 @@
   var LIST_TTL = 30 * 60 * 1000, BAD_TTL = 24 * 3600 * 1000, ECO_KBPS = 96, MAX_FAV = 60, MAX_RECENT = 5;
   var TEXT = {
     de: { pick: 'Sender wählen', search: 'Suchen…', loading: 'Lädt…', none: 'Keine Sender gefunden.', fail: 'Radio-Liste nicht erreichbar.', broken: 'Sender nicht erreichbar – nächster…', allbroken: 'Kein Sender in dieser Kategorie erreichbar.', reconnect: 'Verbindet neu…', offline: 'Offline – wartet auf Netz', error: 'Fehler',
-          play: 'Radio abspielen', pause: 'Radio pausieren', stations: 'Senderliste', volume: 'Lautstärke', prev: 'Vorheriger Sender', next: 'Nächster Sender', dice: 'Zufälliger Sender', fav: 'Favoriten', recent: 'Zuletzt gehört', noFav: 'Noch keine Favoriten – tippe ☆ bei einem Sender.', noRecent: 'Noch nichts gehört.', sleep: 'Einschlaf-Timer', eco: 'Eco ≤96 kbps', addFav: 'Zu Favoriten', delFav: 'Aus Favoriten', sleepDone: 'Gute Nacht – Radio aus', sub: { all: 'Alle', old: 'Alt', new: 'Neu', trap: 'Trap / Techno / Electro' }, subLabel: 'Stil' },
+          play: 'Radio abspielen', pause: 'Radio pausieren', stations: 'Senderliste', volume: 'Lautstärke', prev: 'Vorheriger Sender', next: 'Nächster Sender', dice: 'Zufälliger Sender', fav: 'Favoriten', recent: 'Zuletzt gehört', noFav: 'Noch keine Favoriten – tippe ☆ bei einem Sender.', noRecent: 'Noch nichts gehört.', sleep: 'Einschlaf-Timer', eco: 'Eco ≤96 kbps', addFav: 'Zu Favoriten', delFav: 'Aus Favoriten', sleepDone: 'Gute Nacht – Radio aus', flag: 'Sender melden: funktioniert nicht', reported: 'Danke – gemeldet', sub: { all: 'Alle', old: 'Alt', new: 'Neu', trap: 'Trap / Techno / Electro' }, subLabel: 'Stil' },
     ro: { pick: 'Alege o stație', search: 'Caută…', loading: 'Se încarcă…', none: 'Nicio stație găsită.', fail: 'Lista de radio nu e disponibilă.', broken: 'Stația nu răspunde – trec la următoarea…', allbroken: 'Nicio stație din această categorie nu răspunde.', reconnect: 'Se reconectează…', offline: 'Offline – aștept rețeaua', error: 'Eroare',
-          play: 'Pornește radioul', pause: 'Oprește radioul', stations: 'Lista de stații', volume: 'Volum', prev: 'Stația anterioară', next: 'Stația următoare', dice: 'Stație la întâmplare', fav: 'Favorite', recent: 'Ascultate recent', noFav: 'Încă nu ai favorite – atinge ☆ la o stație.', noRecent: 'Încă n-ai ascultat nimic.', sleep: 'Cronometru de somn', eco: 'Eco ≤96 kbps', addFav: 'Adaugă la favorite', delFav: 'Scoate din favorite', sleepDone: 'Noapte bună – radio oprit', sub: { all: 'Toate', old: 'Vechi', new: 'Noi', trap: 'Trapanele / Tehno / Electro' }, subLabel: 'Stil' },
+          play: 'Pornește radioul', pause: 'Oprește radioul', stations: 'Lista de stații', volume: 'Volum', prev: 'Stația anterioară', next: 'Stația următoare', dice: 'Stație la întâmplare', fav: 'Favorite', recent: 'Ascultate recent', noFav: 'Încă nu ai favorite – atinge ☆ la o stație.', noRecent: 'Încă n-ai ascultat nimic.', sleep: 'Cronometru de somn', eco: 'Eco ≤96 kbps', addFav: 'Adaugă la favorite', delFav: 'Scoate din favorite', sleepDone: 'Noapte bună – radio oprit', flag: 'Raportează: stația nu merge', reported: 'Mulțumim – raportat', sub: { all: 'Toate', old: 'Vechi', new: 'Noi', trap: 'Trapanele / Tehno / Electro' }, subLabel: 'Stil' },
     en: { pick: 'Pick a station', search: 'Search…', loading: 'Loading…', none: 'No stations found.', fail: 'Radio list unavailable.', broken: 'Station not reachable – trying the next one…', allbroken: 'No station in this category is reachable.', reconnect: 'Reconnecting…', offline: 'Offline – waiting for network', error: 'Error',
-          play: 'Play radio', pause: 'Pause radio', stations: 'Station list', volume: 'Volume', prev: 'Previous station', next: 'Next station', dice: 'Random station', fav: 'Favorites', recent: 'Recently played', noFav: 'No favorites yet – tap ☆ on a station.', noRecent: 'Nothing played yet.', sleep: 'Sleep timer', eco: 'Eco ≤96 kbps', addFav: 'Add to favorites', delFav: 'Remove from favorites', sleepDone: 'Good night – radio off', sub: { all: 'All', old: 'Old school', new: 'New', trap: 'Trap / Techno / Electro' }, subLabel: 'Style' }
+          play: 'Play radio', pause: 'Pause radio', stations: 'Station list', volume: 'Volume', prev: 'Previous station', next: 'Next station', dice: 'Random station', fav: 'Favorites', recent: 'Recently played', noFav: 'No favorites yet – tap ☆ on a station.', noRecent: 'Nothing played yet.', sleep: 'Sleep timer', eco: 'Eco ≤96 kbps', addFav: 'Add to favorites', delFav: 'Remove from favorites', sleepDone: 'Good night – radio off', flag: 'Report: station does not work', reported: 'Thanks – reported', sub: { all: 'All', old: 'Old school', new: 'New', trap: 'Trap / Techno / Electro' }, subLabel: 'Style' }
   };
   var L = function () { var l = typeof lang === 'string' ? lang : ''; if (!TEXT[l]) { try { l = localStorage.getItem('lxaLang') || ''; } catch (e) { l = ''; } } return TEXT[l] || TEXT.de; };
   var store = {
@@ -26,7 +26,7 @@
 
   var audio = null;                    // created at the first play: the ONE audio element
   var data = null, view = 'cat' /* cat | fav | recent */, catId = 'pop', current = null /* {cat, i} */, state = 'idle', statusKey = '', failTimer = 0, tries = 0, retried = false, waitOnline = false, loadingList = null;
-  var stat = { retry: 0, skip: 0 };   // diagnostics (window.LXARadio.stats)
+  var stat = { retry: 0, skip: 0, report: 0 };   // diagnostics (window.LXARadio.stats)
   var attemptSeq = 0, handledAttempt = 0;   // every (re)start of a stream is one attempt; the error event AND the play() rejection of the same attempt count once
   var sleepTimer = 0, sleepTick = 0, sleepEnd = 0, lastDir = 1;   // lastDir: a dead station is skipped in the direction the listener was going (⏮ keeps going back)
   var saved = store.get(KEY, {}); if (!saved || typeof saved !== 'object') saved = {};
@@ -54,6 +54,25 @@
   var isBad = function (u) { return !!bad()[u]; };
   var markBad = function (u) { var m = bad(); m[u] = Date.now(); store.set(BAD_KEY, m); };
   var clearBad = function (u) { var m = bad(); if (m[u]) { delete m[u]; store.set(BAD_KEY, m); } };
+  // ---- health reports: a station that keeps failing is reported by itself (after the retry), and the 🚩 button reports by hand. Anonymous: only a random id that never leaves this device's storage
+  // except as a hash on the server; no account data. The reports are evidence for the owner (admin panel > RADIO), nothing changes by itself.
+  var REPORT_KEY = 'lxa-radio-rep-v1', DEV_KEY = 'lxa-radio-dev-v1', REPORT_TTL = 6 * 3600 * 1000, RECHECK_AFTER = 3 * 3600 * 1000;
+  var flagBtn = $('radioFlag'), toastKey = '', toastTimer = 0, attemptAt = 0, failCode = '', rechecked = false;
+  var deviceId = function () {
+    var id = store.get(DEV_KEY, ''); if (typeof id === 'string' && /^[a-z0-9]{12,40}$/.test(id)) return id;
+    id = ''; try { var b = new Uint8Array(10); crypto.getRandomValues(b); for (var k = 0; k < b.length; k++) id += ('0' + b[k].toString(16)).slice(-2); } catch (e) { id = (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + '000000000000').slice(0, 20); }
+    store.set(DEV_KEY, id); return id;
+  };
+  var reportedMap = function () { var m = store.get(REPORT_KEY, {}), now = Date.now(), out = {}; Object.keys(m).forEach(function (k) { if (now - m[k] < REPORT_TTL) out[k] = m[k]; }); return out; };
+  function sendReport(item, kind, code) {
+    if (!item || !safeUrl(item.u)) return;
+    var key = kind + ' ' + item.u, seen = reportedMap(); if (seen[key]) return;   // the same station, the same way: once per 6 h per device
+    seen[key] = Date.now(); store.set(REPORT_KEY, seen); stat.report++;
+    var net = navigator.connection && navigator.connection.effectiveType;
+    var body = { action: 'report', u: item.u, kind: kind, code: code, dev: deviceId(), net: net || '', ms: attemptAt ? Date.now() - attemptAt : 0, ns: audio ? audio.networkState : 0, rs: audio ? audio.readyState : 0 };
+    try { fetch('/api/radio', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(function () { /* a lost report is no problem */ }); } catch (e) { /* ignore */ }
+  }
+  function toast(key) { toastKey = key; clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastKey = ''; renderStatus(); }, 2500); renderStatus(); }
   function toggleFav(item) { var list = favs(); var at = -1; list.forEach(function (f, i) { if (f.u === item.u) at = i; }); if (at >= 0) list.splice(at, 1); else list.unshift(item); store.set(FAV_KEY, list.slice(0, MAX_FAV)); }
   function addRecent(item) { var list = recents().filter(function (r) { return r.u !== item.u; }); list.unshift(item); store.set(RECENT_KEY, list.slice(0, MAX_RECENT)); }
 
@@ -82,20 +101,36 @@
     renderStatus();
   }
   function renderStatus() {
-    var t = statusKey ? L()[statusKey] : '';
+    var t = toastKey ? L()[toastKey] : statusKey ? L()[statusKey] : '';
     if (!t && sleepEnd) { var min = Math.max(1, Math.ceil((sleepEnd - Date.now()) / 60000)); t = '⏲ ' + min + ' min'; }
     statusEl.textContent = t || '';
     bar.classList.toggle('has-status', !!t);
     msgEl.textContent = statusKey === 'broken' || statusKey === 'allbroken' || statusKey === 'offline' || statusKey === 'fail' ? L()[statusKey] : '';
   }
-  function label() { var item = currentItem(); nameEl.textContent = item ? item.n : (saved.name || L().pick); }
+  function label() { var item = currentItem(); nameEl.textContent = item ? item.n : (saved.name || L().pick); if (flagBtn) flagBtn.hidden = !item; }
   function applyText() {
     searchEl.placeholder = L().search; toggleBtn.setAttribute('aria-label', L().stations); volEl.setAttribute('aria-label', L().volume); prevBtn.setAttribute('aria-label', L().prev); nextBtn.setAttribute('aria-label', L().next);
     diceBtn.setAttribute('aria-label', L().dice); diceBtn.title = L().dice; favBtn.setAttribute('aria-label', L().fav); favBtn.title = L().fav; recentBtn.setAttribute('aria-label', L().recent); recentBtn.title = L().recent;
+    if (flagBtn) { flagBtn.setAttribute('aria-label', L().flag); flagBtn.title = L().flag; }
     sleepEl.setAttribute('aria-label', L().sleep); sleepEl.title = L().sleep; ecoLabel.textContent = L().eco; setState(state, statusKey); label(); if (data && !panel.hidden) { renderSub(); renderList(); }
   }
 
   // ---- list from the server
+  function normalize(json) {
+    if (!json || !Array.isArray(json.cats)) throw new Error('bad list');
+    json.cats = json.cats.map(function (c) { return { id: String(c.id), emoji: String(c.emoji || ''), label: String(c.label || c.id), items: (Array.isArray(c.items) ? c.items : []).map(cleanItem).filter(Boolean) }; });
+    json.at = Date.now(); return json;
+  }
+  // a station that worked when the list was built can die hours later: when the last check of the server is old, ask it to probe the listed stations again (once per page load; the server decides
+  // whether it is really due). The answer replaces the list quietly; what is playing keeps playing.
+  function maybeRecheck(json) {
+    var checked = Number(json.checkedAt || json.updatedAt) || 0; if (rechecked || !checked || Date.now() - checked < RECHECK_AFTER) return;
+    rechecked = true;
+    fetch('/api/radio?recheck=1', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j) return; data = normalize(j); store.set(LIST_KEY, data);
+      if (!panel.hidden && view !== 'fav' && view !== 'recent') { renderCats(); renderList(); }
+    }).catch(function () { /* the list stays as it was */ });
+  }
   function fetchList() {
     if (data && Date.now() - data.at < LIST_TTL) return Promise.resolve(data);
     if (loadingList) return loadingList;
@@ -103,9 +138,7 @@
     if (!data && cached && cached.cats && Date.now() - cached.at < LIST_TTL) { data = cached; return Promise.resolve(data); }
     setState(state, state === 'idle' ? 'loading' : statusKey);
     loadingList = fetch('/api/radio', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); }).then(function (json) {
-      if (!json || !Array.isArray(json.cats)) throw new Error('bad list');
-      json.cats = json.cats.map(function (c) { return { id: String(c.id), emoji: String(c.emoji || ''), label: String(c.label || c.id), items: (Array.isArray(c.items) ? c.items : []).map(cleanItem).filter(Boolean) }; });
-      json.at = Date.now(); data = json; store.set(LIST_KEY, json);
+      json = normalize(json); data = json; store.set(LIST_KEY, json); maybeRecheck(json);
       if (state === 'idle') setState('idle', ''); return data;
     }).catch(function (e) {
       if (cached && cached.cats) { data = cached; if (state === 'idle') setState('idle', ''); return data; }   // last list this device saw
@@ -179,9 +212,9 @@
       var it = currentItem(); if (it) { clearBad(it.u); addRecent(it); }
       if (navigator.mediaSession) navigator.mediaSession.playbackState = 'playing';
     });
-    audio.addEventListener('waiting', function () { if (state === 'playing') armFail(); });
-    audio.addEventListener('error', function () { onBroken(attemptSeq); });
-    audio.addEventListener('stalled', function () { if (state === 'loading') armFail(); });
+    audio.addEventListener('waiting', function () { if (state === 'playing') armFail('stall'); });
+    audio.addEventListener('error', function () { failCode = 'e' + (audio.error ? audio.error.code : 0); onBroken(attemptSeq); });   // MediaError: 1 aborted, 2 network, 3 decode, 4 source not supported
+    audio.addEventListener('stalled', function () { if (state === 'loading') armFail('timeout'); });
     var v = Number(volEl.value) / 100; audio.volume = v;
     if (Math.abs(audio.volume - v) > 0.01 && v !== 1) bar.classList.add('no-volume');   // iOS: the volume is the hardware buttons only
     if (navigator.mediaSession) {
@@ -192,10 +225,10 @@
     }
     return audio;
   }
-  function armFail() { clearTimeout(failTimer); var my = attemptSeq; failTimer = setTimeout(function () { onBroken(my); }, 12000); }
+  function armFail(code) { clearTimeout(failTimer); var my = attemptSeq; failTimer = setTimeout(function () { failCode = code || 'timeout'; onBroken(my); }, 12000); }
   function start(item) {
-    var a = ensureAudio(), my = ++attemptSeq; armFail(); a.src = item.u;
-    var p = a.play(); if (p && p.catch) p.catch(function (e) { if (my !== attemptSeq) return; if (e && e.name === 'NotAllowedError') { clearTimeout(failTimer); setState('paused', ''); } else onBroken(my); });
+    var a = ensureAudio(), my = ++attemptSeq; attemptAt = Date.now(); failCode = ''; armFail('timeout'); a.src = item.u;
+    var p = a.play(); if (p && p.catch) p.catch(function (e) { if (my !== attemptSeq) return; if (e && e.name === 'NotAllowedError') { clearTimeout(failTimer); setState('paused', ''); } else { failCode = failCode || 'reject'; onBroken(my); } });
   }
   // the next station of the list that did not fail here recently (null = every other one failed)
   function nextGood(catKey, from, dir) {
@@ -210,7 +243,7 @@
     var it = currentItem(); if (!it) return;
     if (navigator.onLine === false) { waitOnline = true; if (audio) audio.pause(); setState('error', 'offline'); return; }   // no network: do not burn through the list
     if (!retried) { retried = true; stat.retry++; setState('loading', 'reconnect'); start(it); return; }                                // one more try on the SAME station first
-    markBad(it.u); retried = false; stat.skip++;
+    markBad(it.u); retried = false; stat.skip++; sendReport(it, 'auto', failCode || 'x');   // failed twice in a row on this device: the owner gets to know (anonymous)
     var here = curIndex(), size = (cat(current.cat) || { items: [] }).items.length; if (here < 0) here = lastDir > 0 ? -1 : size;   // the playing station is hidden by a filter: continue from the edge
     var next = nextGood(current.cat, here, lastDir);
     if (next === null || tries >= 4) { tries = 0; if (audio) audio.pause(); setState('error', 'allbroken'); return; }
@@ -269,6 +302,16 @@
   }
   function viewButton(which) { view = view === which ? 'cat' : which; searchEl.value = ''; if (data) { renderCats(); renderList(); } else fetchList().then(function () { renderCats(); renderList(); }).catch(function () { /* shown */ }); }
 
+  // 🚩 = "this station does not work for me" (also: it plays but is silent / the wrong thing). Reports it, dims it here for 24 h and moves on to the next one in the direction the listener was going.
+  function flag() {
+    var it = currentItem(); if (!it) return;
+    sendReport(it, 'manual', state === 'playing' ? 'playing' : state === 'loading' ? 'loading' : 'nostart');
+    markBad(it.u); toast('reported');
+    var key = current.cat, c = cat(key), from = curIndex(); if (from < 0) from = lastDir > 0 ? -1 : (c ? c.items.length : 0);
+    if (nextGood(key, from, lastDir) === null) pause(); else step(lastDir);
+    if (!panel.hidden) renderList();
+  }
+  if (flagBtn) flagBtn.addEventListener('click', flag);
   playBtn.addEventListener('click', toggle);
   prevBtn.addEventListener('click', function () { step(-1); });
   nextBtn.addEventListener('click', function () { step(1); });
@@ -290,5 +333,5 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) openPanel(false); });
 
   setState('idle', ''); applyText();
-  window.LXARadio = { state: function () { return { state: state, view: view, cat: catId, current: currentItem() || null, tries: tries, status: statusKey, eco: eco, dir: lastDir, retried: retried }; }, audio: function () { return audio; }, bad: bad, stats: stat };
+  window.LXARadio = { state: function () { return { state: state, view: view, cat: catId, current: currentItem() || null, tries: tries, status: statusKey, eco: eco, dir: lastDir, retried: retried }; }, audio: function () { return audio; }, bad: bad, stats: stat, deviceId: deviceId };
 })();

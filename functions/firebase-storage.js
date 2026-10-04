@@ -123,6 +123,34 @@ async function saveRadioCache(data) {
   await db.ref('meta/radio').set(data);
 }
 
+// Radio health (functions/radio-reports.js): player reports per station (`radioReports/<key>`) and the owner's hide list (`meta/radioHide/<key>` = {u, n, at}).
+async function updateRadioReport(key, mutate) {
+  initFirebase();
+  if (!db) throw new Error('Firebase not initialized');
+  const result = await db.ref(`radioReports/${key}`).transaction(current => mutate(current || null));
+  if (!result.committed) throw new Error('Radio report did not commit');
+}
+async function getRadioReports() {
+  initFirebase();
+  if (!db) return {};
+  return (await db.ref('radioReports').once('value')).val() || {};
+}
+async function clearRadioReport(key) {
+  initFirebase();
+  if (!db) throw new Error('Firebase not initialized');
+  await db.ref(`radioReports/${key}`).remove();
+}
+async function getRadioHidden() {
+  initFirebase();
+  if (!db) return {};
+  return (await db.ref('meta/radioHide').once('value')).val() || {};
+}
+async function setRadioHidden(key, value) {
+  initFirebase();
+  if (!db) throw new Error('Firebase not initialized');
+  if (value) await db.ref(`meta/radioHide/${key}`).set(value); else await db.ref(`meta/radioHide/${key}`).remove();
+}
+
 async function getLeaderboard({ strict = false } = {}) {
   try {
     initFirebase();
@@ -186,6 +214,11 @@ module.exports = {
   reserveName,
   getRadioCache,
   saveRadioCache,
+  updateRadioReport,
+  getRadioReports,
+  clearRadioReport,
+  getRadioHidden,
+  setRadioHidden,
   getRtpSettings,
   saveRtpSettings
 };

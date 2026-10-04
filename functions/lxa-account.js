@@ -556,6 +556,28 @@ const accountHandler = async event => {
       if (changed) await saveLeaderboard(boards);
       return json({ ok: true });
     }
+    // RADIO HEALTH (admin panel > RADIO): what the players reported, stations the periodic re-check removed, the hide list. Same admin gate + password as every admin action.
+    // ops: list | hide | unhide | clear (forget the reports of one station) | test (probe the station now, plain request and phone-style request, with the reason)
+    if (action === 'admin-radio') {
+      const admin = await read(input.id); if (!admin) return json({ error: 'ID not found.' }, 404);
+      if (!isAdminAccount(admin)) return json({ error: 'Not authorized.' }, 403);
+      { const denied = await checkSafeWord(admin, input.safeWord); if (denied) return denied; }
+      const store = require('./firebase-storage'), health = require('./radio-reports'), op = String(input.op || 'list'), key = String(input.key || '');
+      if (op === 'list') {
+        const [reports, hidden, cache] = await Promise.all([store.getRadioReports(), store.getRadioHidden(), store.getRadioCache().catch(() => null)]);
+        const stations = cache && Array.isArray(cache.cats) ? new Set(cache.cats.flatMap(cat => cat.items.map(item => item.u))).size : 0;
+        return json({ ...health.summarize(reports, hidden), stations, updatedAt: number(cache && cache.updatedAt), checkedAt: number(cache && (cache.checkedAt || cache.updatedAt)), dropped: cache && Array.isArray(cache.dropped) ? cache.dropped.slice(0, 40).map(d => ({ n: String(d.n || ''), u: String(d.u || ''), at: number(d.at), key: health.radioKey(d.u) })) : [] });
+      }
+      if (!/^[0-9a-f]{16}$/.test(key)) return json({ error: 'Bad request.' }, 400);
+      const [reports, hidden] = await Promise.all([store.getRadioReports(), store.getRadioHidden()]), node = reports[key] || hidden[key] || null;
+      if (op === 'unhide') { await store.setRadioHidden(key, null); return json({ ok: true }); }
+      if (op === 'clear') { await store.clearRadioReport(key); return json({ ok: true }); }
+      const dropped = node ? null : (await store.getRadioCache().catch(() => null)), fromDropped = dropped && Array.isArray(dropped.dropped) ? dropped.dropped.find(d => health.radioKey(d.u) === key) : null, found = node || fromDropped;
+      if (!found || !found.u) return json({ error: 'Station not found.' }, 404);
+      if (op === 'hide') { await store.setRadioHidden(key, { u: String(found.u), n: String(found.n || '').slice(0, 60), at: Date.now() }); return json({ ok: true }); }
+      if (op === 'test') return json({ test: await require('./radio').diagnose(String(found.u)) });
+      return json({ error: 'Bad request.' }, 400);
+    }
     return json({ error: 'Unknown action.' }, 400);
   } catch (error) { console.error(error); return json({ error: 'Server temporarily unavailable.' }, 500); }
 };

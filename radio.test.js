@@ -122,8 +122,9 @@ describe('getList (cache, outage)', () => {
 
 describe('handler', () => {
   beforeEach(() => radio.__resetMemory());
-  test('only GET; OPTIONS allowed', async () => {
-    expect((await radio.handler({ httpMethod: 'POST' })).statusCode).toBe(405);
+  test('GET (list), POST (player report) and OPTIONS are allowed; anything else is refused', async () => {
+    expect((await radio.handler({ httpMethod: 'PUT' })).statusCode).toBe(405);
+    expect((await radio.handler({ httpMethod: 'POST', body: '{}' })).statusCode).toBe(400);   // a POST is a report: an empty one is a bad request
     expect((await radio.handler({ httpMethod: 'OPTIONS' })).statusCode).toBe(200);
   });
   test('without any list and with Radio Browser unreachable: 503, no-store', async () => {
