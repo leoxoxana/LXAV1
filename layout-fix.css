@@ -6003,3 +6003,5 @@ html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-rank{color:
 html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-diff[data-level="0"]{color:#ffbf3a!important;text-shadow:0 0 8px rgba(255,191,58,.7),0 1px 0 rgba(0,0,0,.6)!important}
 html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-diff[data-level="1"]{color:#ff4b3e!important;text-shadow:0 0 8px rgba(255,75,62,.7),0 1px 0 rgba(0,0,0,.6)!important}
 html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-diff[data-level="2"]{color:#eef1ff!important;text-shadow:0 0 8px rgba(238,241,255,.7),0 1px 0 rgba(0,0,0,.6)!important}
+/* BRUTTO: the label stays gold, the amount is bright white (not the same colour as the label) */
+html body:not(#_):not(#__):not(#___):not(#____) #winBoard .board-summary .board-total.gross-result b{color:#ffffff!important;text-shadow:0 0 10px rgba(255,255,255,.55)!important}
