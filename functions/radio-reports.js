@@ -27,9 +27,9 @@ function cleanReport(raw, agent) {
 }
 const bump = (map, key) => { const out = { ...(map || {}) }; out[key] = (Number(out[key]) || 0) + 1; return out; };
 // the node of one station after one more report (pure: used inside the Firebase transaction)
-function applyReport(current, report, name, now) {
+function applyReport(current, report, name, now, codec) {
   const node = current && typeof current === 'object' ? { ...current } : {};
-  node.u = report.u; node.n = String(name || node.n || '').slice(0, 60); node.first = Number(node.first) || now; node.last = now;
+  node.u = report.u; node.n = String(name || node.n || '').slice(0, 60); if (codec) node.c = String(codec).slice(0, 12); node.first = Number(node.first) || now; node.last = now;
   const devices = { ...(node.devices || {}) }, before = devices[report.dev], again = before && before.k === report.kind && now - Number(before.t || 0) < DEDUPE_MS;
   devices[report.dev] = { t: now, k: report.kind };
   const keys = Object.keys(devices); if (keys.length > MAX_DEVICES) keys.sort((a, b) => devices[a].t - devices[b].t).slice(0, keys.length - MAX_DEVICES).forEach(key => { delete devices[key]; });
@@ -55,7 +55,7 @@ function allow(dev, now = Date.now()) {
 function summarize(reports, hidden, now = Date.now()) {
   const hiddenMap = hidden || {};
   const rows = Object.entries(reports || {}).filter(([, node]) => node && node.u).map(([key, node]) => ({
-    key, n: String(node.n || ''), u: String(node.u), devices: Object.keys(node.devices || {}).length, count: Number(node.count) || 0, auto: Number(node.auto) || 0, manual: Number(node.manual) || 0,
+    key, n: String(node.n || ''), c: String(node.c || ''), u: String(node.u), devices: Object.keys(node.devices || {}).length, count: Number(node.count) || 0, auto: Number(node.auto) || 0, manual: Number(node.manual) || 0,
     last: Number(node.last) || 0, codes: node.codes || {}, plats: node.plats || {}, nets: node.nets || {}, lastCode: node.lastCode || '', lastMs: Number(node.lastMs) || 0, hidden: Boolean(hiddenMap[key]), ageH: Math.round((now - (Number(node.last) || 0)) / 3600000)
   }));
   rows.sort((a, b) => b.devices - a.devices || b.last - a.last);

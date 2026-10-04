@@ -220,3 +220,26 @@ describe('admin: RADIO view', () => {
     try { const r = (await call({ op: 'test', key: health.radioKey(URL_A) })).body.test; expect(r.server.ok).toBe(true); expect(r.phone.ok).toBe(false); expect(r.phone.why).toMatch(/text\/html/); } finally { delete global.fetch; }
   });
 });
+
+describe('blocked host (Radio Marketescu on radiolize.com does not play on the owner\'s phone)', () => {
+  const MARK = 'https://s45.radiolize.com/radio/8060/radio.mp3';
+  test('blockedUrl: the host and its sub-hosts, nothing else', () => {
+    expect(radio.blockedUrl(MARK)).toBe(true); expect(radio.blockedUrl('https://radiolize.com/x')).toBe(true);
+    expect(radio.blockedUrl('https://notradiolize.com/x')).toBe(false); expect(radio.blockedUrl('https://stream.zeno.fm/abc')).toBe(false); expect(radio.blockedUrl('not a url')).toBe(false);
+  });
+  test('a station on the blocked host is never usable, not even through its https twin', () => {
+    const st = { stationuuid: 'm', name: 'Radio Marketescu Rap&Trap', url_resolved: MARK, codec: 'AAC', bitrate: 192, lastcheckok: 1, hls: 0, ssl_error: 0, countrycode: 'RO', tags: 'rap,trap' };
+    expect(radio.usable(st)).toBe(false); expect(radio.upgradable({ ...st, url_resolved: MARK.replace('https', 'http') })).toBe(false);
+  });
+  test('a list that was built BEFORE the block still stops serving the station (no rebuild needed)', async () => {
+    await stored({ cats: [{ id: 'rap', emoji: 'x', label: 'RAP', items: [item('Radio Marketescu Rap&Trap', MARK), item('Alpha', URL_A)] }] });
+    const body = JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body);
+    expect(body.cats[0].items.map(i => i.n)).toEqual(['Alpha']);
+  });
+  test('a report remembers the codec / bitrate of the station (to see whether one format fails on phones)', async () => {
+    await stored({ cats: [{ id: 'pop', emoji: 'y', label: 'POP', items: [{ n: 'Aac One', u: URL_A, c: 'AAC', b: 192, cc: 'RO' }] }] });
+    await radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ action: 'report', u: URL_A, kind: 'manual', code: 'nostart', dev: 'abcdef123456abcd' }) });
+    expect(storage.__reports()[health.radioKey(URL_A)].c).toBe('AAC 192');
+    expect(health.summarize(storage.__reports(), {}).reports[0].c).toBe('AAC 192');
+  });
+});

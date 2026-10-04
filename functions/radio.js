@@ -39,6 +39,10 @@ const NOT_MUSIC = /\bnews\b|\btalk\b|religio|cre[sș]tin|christian|gospel|\bspor
 // Moderation without a fixed station list: RADIO_HIDE=word1,word2 (Vercel env) hides every station whose name contains one of the words.
 const hiddenWords = () => String(process.env.RADIO_HIDE || '').toLowerCase().split(',').map(w => w.trim()).filter(Boolean);
 const isHidden = station => { const name = String(station.name || '').toLowerCase(); return hiddenWords().some(word => name.includes(word)); };
+// Hosts that are known NOT to play on the owner's phone although they answer this server's probe (Radio Marketescu on radiolize.com does not play even when its address is opened directly in Safari).
+// No probe can see that (the server is in Frankfurt, the phone is not): the owner's report is the evidence. More hosts can be hidden without a deploy from admin > RADIO.
+const BLOCKED_HOSTS = ['radiolize.com'];
+const blockedUrl = url => { let host = ''; try { host = new URL(url).hostname.toLowerCase(); } catch (error) { return false; } return BLOCKED_HOSTS.some(blocked => host === blocked || host.endsWith('.' + blocked)); };
 // STYLES of manele (only the MANELE category carries them). The directory has no tag for "trapanele" / "tehno manele" (1 station says so), so styles are recognised from the tags + name signals that really exist:
 //  old = manele vechi / de aur / retro,  new = manele noi / hits,  trap = trap / techno / club / hip hop / dj / remix / edm / bass / electronic,  etno = etno / lautareasca / taraf / orient / balcan,
 //  folk = muzica populara / folclor (the tag "populara" alone is only a party tag on ~45 manele stations: it counts together with "popular" in the name).
@@ -66,7 +70,7 @@ function usable(station) {
   if (Number(station.hls) === 1) return false;
   if (Number(station.lastcheckok) !== 1) return false;
   if (Number(station.ssl_error) === 1) return false;
-  return cleanName(station.name).length >= 2 && !isHidden(station);
+  return cleanName(station.name).length >= 2 && !isHidden(station) && !blockedUrl(streamUrl(station));
 }
 // Many directory entries are plain http only, which a https page cannot play (mixed content). The very same address often answers over https too (e.g. the same port with TLS):
 // such a station is kept as a candidate, its https twin is what gets probed and, if it really delivers audio, what the player uses. The player never receives an http url.
@@ -253,7 +257,8 @@ async function hiddenKeys(storage, now = Date.now()) {
 }
 const servedList = (data, keys) => {
   const rest = { ...data }; delete rest.dropped;   // `dropped` is for the admin, players do not need it
-  return keys.size ? { ...rest, cats: rest.cats.map(cat => ({ ...cat, items: cat.items.filter(item => !keys.has(reports.radioKey(item.u))) })) } : rest;
+  const shown = item => !blockedUrl(item.u) && !keys.has(reports.radioKey(item.u));   // blocked hosts also leave a list that was built before the block existed
+  return { ...rest, cats: rest.cats.map(cat => ({ ...cat, items: cat.items.filter(shown) })) };
 };
 
 // POST {action:'report'}: a player says a station does not play (automatic after a failure, or the 🚩 button). Only stations of the current list are accepted, so the node count is bounded.
@@ -264,9 +269,9 @@ async function handleReport(event, storage) {
   if (!report) return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' });
   if (!reports.allow(report.dev)) return reply({ error: 'Too many reports.' }, 429, { 'cache-control': 'no-store' });
   if (!memory) memory = await loadStored(storage);
-  let name = null; for (const cat of (memory && memory.cats) || []) { const hit = cat.items.find(item => item.u === report.u); if (hit) { name = hit.n; break; } }
+  let name = null, codec = ''; for (const cat of (memory && memory.cats) || []) { const hit = cat.items.find(item => item.u === report.u); if (hit) { name = hit.n; codec = `${hit.c || ''}${hit.b ? ' ' + hit.b : ''}`.trim(); break; } }
   if (name === null) return reply({ error: 'Unknown station.' }, 404, { 'cache-control': 'no-store' });
-  try { const now = Date.now(); await storage.updateRadioReport(reports.radioKey(report.u), current => reports.applyReport(current, report, name, now)); } catch (error) { return reply({ error: 'Report not saved.' }, 503, { 'cache-control': 'no-store' }); }
+  try { const now = Date.now(); await storage.updateRadioReport(reports.radioKey(report.u), current => reports.applyReport(current, report, name, now, codec)); } catch (error) { return reply({ error: 'Report not saved.' }, 503, { 'cache-control': 'no-store' }); }
   return reply({ ok: true }, 200, { 'cache-control': 'no-store' });
 }
 
@@ -284,5 +289,5 @@ exports.handler = async event => {
     return reply({ error: 'Radio list temporarily unavailable.' }, 503, { 'cache-control': 'no-store' });
   }
 };
-exports.BUILDER_VERSION = BUILDER_VERSION; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.__resetHidden = () => { hiddenCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
+exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.__resetHidden = () => { hiddenCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
 exports.__resetMemory = () => { memory = null; building = null; };

@@ -5836,12 +5836,6 @@ html body:not(#_):not(#__):not(#___):not(#____) .radio-credit{margin-left:auto!i
 @media (max-width:520px){html body:not(#_):not(#__):not(#___):not(#____) .radio-vol{display:none!important}}
 @media (max-width:340px){html body:not(#_):not(#__):not(#___):not(#____) .radio-skip{width:28px!important;height:28px!important}html body:not(#_):not(#__):not(#___):not(#____) .radio-row{gap:4px!important;padding:0 6px!important}}
 
-/* ===== Radio: style filters inside MANELE (trap / techno, old, new, ethno, folk) ===== */
-html body:not(#_):not(#__):not(#___):not(#____) .radio-sub{display:flex!important;flex-wrap:wrap!important;gap:4px!important;margin:0 0 6px!important}
-html body:not(#_):not(#__):not(#___):not(#____) .radio-sub[hidden]{display:none!important}
-html body:not(#_):not(#__):not(#___):not(#____) .radio-subbtn{flex:0 0 auto!important;height:26px!important;min-height:0!important;padding:0 9px!important;margin:0!important;border-radius:13px!important;border:1px solid rgba(190,140,255,.35)!important;background:rgba(10,18,72,.55)!important;color:#dfe6ff!important;font:700 10.5px/1 Consolas,'JetBrains Mono',monospace!important;white-space:nowrap!important;cursor:pointer!important;touch-action:manipulation!important}
-html body:not(#_):not(#__):not(#___):not(#____) .radio-subbtn.on{background:linear-gradient(180deg,#ff7a45,#e8442a)!important;border-color:rgba(255,160,120,.8)!important;color:#fff!important}
-html body:not(#_):not(#__):not(#___):not(#____) .radio-subbtn:focus-visible{outline:2px solid var(--lxa-cyan-400)!important;outline-offset:2px!important}
 
 /* ===== Result panel: "N LINIEN" title, NETTO and BRUTTO all the same size; NETTO + BRUTTO on ONE row (different colours); the title stands out a little ===== */
 html body:not(#_):not(#__):not(#___):not(#____) #winBoard{--lxa-board-fs:clamp(15px,4.4vw,18px)}
