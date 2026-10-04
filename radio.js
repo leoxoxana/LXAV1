@@ -7,16 +7,16 @@
   var $ = function (id) { return document.getElementById(id); };
   var playBtn = $('radioPlay'), prevBtn = $('radioPrev'), nextBtn = $('radioNext'), titleBtn = $('radioTitle'), nameEl = $('radioName'), statusEl = $('radioStatus'), volEl = $('radioVol'), toggleBtn = $('radioToggle'),
       panel = $('radioPanel'), catsEl = $('radioCats'), searchEl = $('radioSearch'), diceBtn = $('radioDice'), favBtn = $('radioFav'), recentBtn = $('radioRecent'), listEl = $('radioList'),
-      sleepEl = $('radioSleep'), ecoEl = $('radioEco'), ecoLabel = $('radioEcoLabel'), msgEl = $('radioMsg');
+      subEl = $('radioSub'), sleepEl = $('radioSleep'), ecoEl = $('radioEco'), ecoLabel = $('radioEcoLabel'), msgEl = $('radioMsg');
   var KEY = 'lxa-radio-v1', LIST_KEY = 'lxa-radio-list-v1', BAD_KEY = 'lxa-radio-bad-v1', FAV_KEY = 'lxa-radio-fav-v1', RECENT_KEY = 'lxa-radio-recent-v1';
   var LIST_TTL = 30 * 60 * 1000, BAD_TTL = 24 * 3600 * 1000, ECO_KBPS = 96, MAX_FAV = 60, MAX_RECENT = 5;
   var TEXT = {
     de: { pick: 'Sender wählen', search: 'Suchen…', loading: 'Lädt…', none: 'Keine Sender gefunden.', fail: 'Radio-Liste nicht erreichbar.', broken: 'Sender nicht erreichbar – nächster…', allbroken: 'Kein Sender in dieser Kategorie erreichbar.', reconnect: 'Verbindet neu…', offline: 'Offline – wartet auf Netz', error: 'Fehler',
-          play: 'Radio abspielen', pause: 'Radio pausieren', stations: 'Senderliste', volume: 'Lautstärke', prev: 'Vorheriger Sender', next: 'Nächster Sender', dice: 'Zufälliger Sender', fav: 'Favoriten', recent: 'Zuletzt gehört', noFav: 'Noch keine Favoriten – tippe ☆ bei einem Sender.', noRecent: 'Noch nichts gehört.', sleep: 'Einschlaf-Timer', eco: 'Eco ≤96 kbps', addFav: 'Zu Favoriten', delFav: 'Aus Favoriten', sleepDone: 'Gute Nacht – Radio aus' },
+          play: 'Radio abspielen', pause: 'Radio pausieren', stations: 'Senderliste', volume: 'Lautstärke', prev: 'Vorheriger Sender', next: 'Nächster Sender', dice: 'Zufälliger Sender', fav: 'Favoriten', recent: 'Zuletzt gehört', noFav: 'Noch keine Favoriten – tippe ☆ bei einem Sender.', noRecent: 'Noch nichts gehört.', sleep: 'Einschlaf-Timer', eco: 'Eco ≤96 kbps', addFav: 'Zu Favoriten', delFav: 'Aus Favoriten', sleepDone: 'Gute Nacht – Radio aus', sub: { all: 'Alle', old: 'Alt', new: 'Neu', trap: 'Trap / Techno', etno: 'Ethno', folk: 'Volksmusik' }, subLabel: 'Stil' },
     ro: { pick: 'Alege o stație', search: 'Caută…', loading: 'Se încarcă…', none: 'Nicio stație găsită.', fail: 'Lista de radio nu e disponibilă.', broken: 'Stația nu răspunde – trec la următoarea…', allbroken: 'Nicio stație din această categorie nu răspunde.', reconnect: 'Se reconectează…', offline: 'Offline – aștept rețeaua', error: 'Eroare',
-          play: 'Pornește radioul', pause: 'Oprește radioul', stations: 'Lista de stații', volume: 'Volum', prev: 'Stația anterioară', next: 'Stația următoare', dice: 'Stație la întâmplare', fav: 'Favorite', recent: 'Ascultate recent', noFav: 'Încă nu ai favorite – atinge ☆ la o stație.', noRecent: 'Încă n-ai ascultat nimic.', sleep: 'Cronometru de somn', eco: 'Eco ≤96 kbps', addFav: 'Adaugă la favorite', delFav: 'Scoate din favorite', sleepDone: 'Noapte bună – radio oprit' },
+          play: 'Pornește radioul', pause: 'Oprește radioul', stations: 'Lista de stații', volume: 'Volum', prev: 'Stația anterioară', next: 'Stația următoare', dice: 'Stație la întâmplare', fav: 'Favorite', recent: 'Ascultate recent', noFav: 'Încă nu ai favorite – atinge ☆ la o stație.', noRecent: 'Încă n-ai ascultat nimic.', sleep: 'Cronometru de somn', eco: 'Eco ≤96 kbps', addFav: 'Adaugă la favorite', delFav: 'Scoate din favorite', sleepDone: 'Noapte bună – radio oprit', sub: { all: 'Toate', old: 'Vechi', new: 'Noi', trap: 'Trapanele / Tehno', etno: 'Etno / Lăutărești', folk: 'Folclor' }, subLabel: 'Stil' },
     en: { pick: 'Pick a station', search: 'Search…', loading: 'Loading…', none: 'No stations found.', fail: 'Radio list unavailable.', broken: 'Station not reachable – trying the next one…', allbroken: 'No station in this category is reachable.', reconnect: 'Reconnecting…', offline: 'Offline – waiting for network', error: 'Error',
-          play: 'Play radio', pause: 'Pause radio', stations: 'Station list', volume: 'Volume', prev: 'Previous station', next: 'Next station', dice: 'Random station', fav: 'Favorites', recent: 'Recently played', noFav: 'No favorites yet – tap ☆ on a station.', noRecent: 'Nothing played yet.', sleep: 'Sleep timer', eco: 'Eco ≤96 kbps', addFav: 'Add to favorites', delFav: 'Remove from favorites', sleepDone: 'Good night – radio off' }
+          play: 'Play radio', pause: 'Pause radio', stations: 'Station list', volume: 'Volume', prev: 'Previous station', next: 'Next station', dice: 'Random station', fav: 'Favorites', recent: 'Recently played', noFav: 'No favorites yet – tap ☆ on a station.', noRecent: 'Nothing played yet.', sleep: 'Sleep timer', eco: 'Eco ≤96 kbps', addFav: 'Add to favorites', delFav: 'Remove from favorites', sleepDone: 'Good night – radio off', sub: { all: 'All', old: 'Old school', new: 'New', trap: 'Trap / Techno', etno: 'Ethno', folk: 'Folk' }, subLabel: 'Style' }
   };
   var L = function () { var l = typeof lang === 'string' ? lang : ''; if (!TEXT[l]) { try { l = localStorage.getItem('lxaLang') || ''; } catch (e) { l = ''; } } return TEXT[l] || TEXT.de; };
   var store = {
@@ -30,14 +30,21 @@
   var attemptSeq = 0, handledAttempt = 0;   // every (re)start of a stream is one attempt; the error event AND the play() rejection of the same attempt count once
   var sleepTimer = 0, sleepTick = 0, sleepEnd = 0, lastDir = 1;   // lastDir: a dead station is skipped in the direction the listener was going (⏮ keeps going back)
   var saved = store.get(KEY, {}); if (!saved || typeof saved !== 'object') saved = {};
-  var eco = saved.eco === true;
+  var eco = saved.eco === true, sub = typeof saved.sub === 'string' ? saved.sub : 'all';   // sub: style filter inside MANELE (all | trap | old | new | etno | folk)
+  var STYLE_ICON = { trap: '⚡', old: '🕰', 'new': '✨', etno: '🎻', folk: '🪕' }, STYLE_ORDER = ['trap', 'old', 'new', 'etno', 'folk'];
   if (saved.cat) catId = saved.cat;
   if (typeof saved.vol === 'number') volEl.value = String(Math.max(0, Math.min(100, saved.vol)));
   ecoEl.checked = eco;
 
   var safeUrl = function (u) { return typeof u === 'string' && /^https:\/\/[^\s]+$/i.test(u); };
-  var cleanItem = function (i) { return i && safeUrl(i.u) && typeof i.n === 'string' ? { n: i.n.slice(0, 60), u: i.u, c: String(i.c || ''), b: Number(i.b) || 0, cc: String(i.cc || '').slice(0, 2) } : null; };
-  var persist = function () { var it = currentItem(); store.set(KEY, { cat: catId, url: it ? it.u : saved.url, name: it ? it.n : saved.name, vol: Number(volEl.value), eco: eco }); };
+  var cleanItem = function (i) {
+    if (!(i && safeUrl(i.u) && typeof i.n === 'string')) return null;
+    var o = { n: i.n.slice(0, 60), u: i.u, c: String(i.c || ''), b: Number(i.b) || 0, cc: String(i.cc || '').slice(0, 2) };
+    if (Array.isArray(i.s)) { var st = i.s.filter(function (x) { return typeof x === 'string' && STYLE_ICON[x]; }).slice(0, 5); if (st.length) o.s = st; }
+    if (i.h) o.h = 1;
+    return o;
+  };
+  var persist = function () { var it = currentItem(); store.set(KEY, { cat: catId, url: it ? it.u : saved.url, name: it ? it.n : saved.name, vol: Number(volEl.value), eco: eco, sub: sub }); };
 
   // ---- device memory: favorites, recent, stations that failed here in the last 24 h
   var favs = function () { return store.get(FAV_KEY, []).map(cleanItem).filter(Boolean); };
@@ -52,19 +59,19 @@
 
   // ---- lists: real categories (from the server) + the two device lists; eco keeps stations up to 96 kbps (unless that would leave almost nothing)
   var ecoFilter = function (items) { var small = items.filter(function (i) { return !i.b || i.b <= ECO_KBPS; }); return small.length >= 3 ? small : items; };
+  function catRaw(id) { var c = data && data.cats.filter(function (x) { return x.id === id; })[0]; return c ? (eco ? { id: c.id, emoji: c.emoji, label: c.label, items: ecoFilter(c.items) } : c) : null; }
+  // MANELE: 'all' hides the folk-only stations (h), a style shows only the stations that carry it
+  var styleFilter = function (items) { return sub === 'all' ? items.filter(function (i) { return !i.h; }) : items.filter(function (i) { return i.s && i.s.indexOf(sub) !== -1; }); };
   function cat(id) {
     if (id === 'fav') return { id: 'fav', items: favs() };
     if (id === 'recent') return { id: 'recent', items: recents() };
-    var c = data && data.cats.filter(function (x) { return x.id === id; })[0];
-    return c ? (eco ? { id: c.id, emoji: c.emoji, label: c.label, items: ecoFilter(c.items) } : c) : null;
+    var c = catRaw(id); if (!c) return null;
+    return id === 'manele' ? { id: c.id, emoji: c.emoji, label: c.label, items: styleFilter(c.items) } : c;
   }
-  var currentItem = function () {
-    var c = current && cat(current.cat); if (!c) return undefined;
-    var it = c.items[current.i];
-    if (it && it.u === current.u) return it;
-    for (var k = 0; k < c.items.length; k++) if (c.items[k].u === current.u) { current.i = k; return c.items[k]; }
-    return undefined;   // the playing station is not in this list any more (eco filter, removed favorite)
-  };
+  var indexOfUrl = function (items, u) { for (var k = 0; k < items.length; k++) if (items[k].u === u) return k; return -1; };
+  var curIndex = function () { var c = current && cat(current.cat); return c ? indexOfUrl(c.items, current.u) : -1; };
+  // the station that is playing; if a filter hides it from the list it is still known (current.item), so the bar keeps its name
+  var currentItem = function () { if (!current) return undefined; var c = cat(current.cat), k = c ? indexOfUrl(c.items, current.u) : -1; if (k >= 0) { current.i = k; return c.items[k]; } return current.item; };
   var activeCatKey = function () { return view === 'cat' ? catId : view; };
 
   // ---- status line (second line of the closed bar) and play button
@@ -85,7 +92,7 @@
   function applyText() {
     searchEl.placeholder = L().search; toggleBtn.setAttribute('aria-label', L().stations); volEl.setAttribute('aria-label', L().volume); prevBtn.setAttribute('aria-label', L().prev); nextBtn.setAttribute('aria-label', L().next);
     diceBtn.setAttribute('aria-label', L().dice); diceBtn.title = L().dice; favBtn.setAttribute('aria-label', L().fav); favBtn.title = L().fav; recentBtn.setAttribute('aria-label', L().recent); recentBtn.title = L().recent;
-    sleepEl.setAttribute('aria-label', L().sleep); sleepEl.title = L().sleep; ecoLabel.textContent = L().eco; setState(state, statusKey); label(); if (data && !panel.hidden) renderList();
+    sleepEl.setAttribute('aria-label', L().sleep); sleepEl.title = L().sleep; ecoLabel.textContent = L().eco; setState(state, statusKey); label(); if (data && !panel.hidden) { renderSub(); renderList(); }
   }
 
   // ---- list from the server
@@ -120,12 +127,26 @@
     });
     favBtn.setAttribute('aria-pressed', view === 'fav' ? 'true' : 'false'); favBtn.classList.toggle('on', view === 'fav');
     recentBtn.setAttribute('aria-pressed', view === 'recent' ? 'true' : 'false'); recentBtn.classList.toggle('on', view === 'recent');
+    renderSub();
+  }
+  function renderSub() {
+    var show = !!data && view === 'cat' && catId === 'manele' && !searchEl.value.trim(); subEl.hidden = !show; if (!show) return;
+    var c = catRaw('manele'); if (!c) { subEl.hidden = true; return; }
+    var counts = {}, plain = c.items.filter(function (i) { return !i.h; }).length; c.items.forEach(function (i) { (i.s || []).forEach(function (s) { counts[s] = (counts[s] || 0) + 1; }); });
+    var keys = STYLE_ORDER.filter(function (k) { return counts[k] >= 2; }); if (sub !== 'all' && keys.indexOf(sub) === -1) sub = 'all';
+    subEl.setAttribute('aria-label', L().subLabel); subEl.textContent = '';
+    ['all'].concat(keys).forEach(function (k) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'radio-subbtn' + (sub === k ? ' on' : ''); b.setAttribute('aria-pressed', sub === k ? 'true' : 'false');
+      b.textContent = (STYLE_ICON[k] ? STYLE_ICON[k] + ' ' : '') + L().sub[k] + ' ' + (k === 'all' ? plain : counts[k]);
+      b.addEventListener('click', function () { sub = k; renderSub(); renderList(); persist(); });
+      subEl.appendChild(b);
+    });
   }
   function renderList() {
     listEl.textContent = '';
     if (!data) return;
     var q = searchEl.value.trim().toLowerCase(), rows = [], key = activeCatKey();
-    if (q) data.cats.forEach(function (c) { (cat(c.id).items).forEach(function (it, i) { if (it.n.toLowerCase().indexOf(q) !== -1 && !rows.some(function (r) { return r.it.u === it.u; })) rows.push({ cid: c.id, it: it, i: i }); }); });
+    if (q) data.cats.forEach(function (c) { (catRaw(c.id).items).forEach(function (it) { if (it.n.toLowerCase().indexOf(q) !== -1 && !rows.some(function (r) { return r.it.u === it.u; })) rows.push({ cid: c.id, it: it, i: -1 }); }); });
     else (cat(key) || { items: [] }).items.forEach(function (it, i) { rows.push({ cid: key, it: it, i: i }); });
     if (view === 'cat' && !q) listEl.setAttribute('aria-labelledby', 'radioTab-' + catId); else listEl.removeAttribute('aria-labelledby');
     if (!rows.length) { var empty = document.createElement('li'); empty.className = 'radio-empty'; empty.textContent = q ? L().none : (view === 'fav' ? L().noFav : view === 'recent' ? L().noRecent : L().none); listEl.appendChild(empty); return; }
@@ -138,9 +159,9 @@
       var name = document.createElement('span'); name.className = 'radio-st-name';
       if (view === 'cat' && !q && r.i < 3 && r.it.cc === 'RO') { var top = document.createElement('span'); top.className = 'radio-top'; top.textContent = '🔥'; top.setAttribute('aria-hidden', 'true'); name.appendChild(top); }   // the flame sits INSIDE the name, so the row layout (name left, quality right) stays the same
       name.appendChild(document.createTextNode(r.it.n));
-      var meta = document.createElement('small'); meta.textContent = (r.it.cc && r.it.cc !== 'RO' ? r.it.cc + ' · ' : '') + r.it.c + (r.it.b ? ' ' + r.it.b : '');
+      var meta = document.createElement('small'); meta.textContent = (r.cid === 'manele' && r.it.s ? r.it.s.map(function (s) { return STYLE_ICON[s] || ''; }).join('') + ' ' : '') + (r.it.cc && r.it.cc !== 'RO' ? r.it.cc + ' · ' : '') + r.it.c + (r.it.b ? ' ' + r.it.b : '');
       b.appendChild(name); b.appendChild(meta);
-      b.addEventListener('click', function () { play(r.cid, r.i, false); afterPick(); });
+      b.addEventListener('click', function () { if (r.i >= 0) play(r.cid, r.i, false); else { var cc = cat(r.cid), k = cc ? indexOfUrl(cc.items, r.it.u) : -1; play(r.cid, k >= 0 ? k : 0, false, k >= 0 ? undefined : r.it); } afterPick(); });
       var star = document.createElement('button'); star.type = 'button'; star.className = 'radio-star'; var isF = faved.indexOf(r.it.u) !== -1;
       star.textContent = isF ? '★' : '☆'; star.setAttribute('aria-pressed', isF ? 'true' : 'false'); star.setAttribute('aria-label', (isF ? L().delFav : L().addFav) + ': ' + r.it.n); star.classList.toggle('on', isF);
       star.addEventListener('click', function () { toggleFav(r.it); if (view === 'fav') { renderList(); } else { var f = isFav(r.it.u); star.textContent = f ? '★' : '☆'; star.setAttribute('aria-pressed', f ? 'true' : 'false'); star.classList.toggle('on', f); star.setAttribute('aria-label', (f ? L().delFav : L().addFav) + ': ' + r.it.n); } });
@@ -190,13 +211,14 @@
     if (navigator.onLine === false) { waitOnline = true; if (audio) audio.pause(); setState('error', 'offline'); return; }   // no network: do not burn through the list
     if (!retried) { retried = true; stat.retry++; setState('loading', 'reconnect'); start(it); return; }                                // one more try on the SAME station first
     markBad(it.u); retried = false; stat.skip++;
-    var next = nextGood(current.cat, current.i, lastDir);
+    var here = curIndex(), size = (cat(current.cat) || { items: [] }).items.length; if (here < 0) here = lastDir > 0 ? -1 : size;   // the playing station is hidden by a filter: continue from the edge
+    var next = nextGood(current.cat, here, lastDir);
     if (next === null || tries >= 4) { tries = 0; if (audio) audio.pause(); setState('error', 'allbroken'); return; }
     tries++; setState('loading', 'broken'); play(current.cat, next, true);
   }
-  function play(catKey, index, auto) {
-    var c = cat(catKey), item = c && c.items[index]; if (!item || !safeUrl(item.u)) return;
-    current = { cat: catKey, i: index, u: item.u }; if (!auto) { tries = 0; lastDir = 1; } retried = false; waitOnline = false;
+  function play(catKey, index, auto, override) {
+    var c = cat(catKey), item = override || (c && c.items[index]); if (!item || !safeUrl(item.u)) return;
+    current = { cat: catKey, i: index, u: item.u, item: item }; if (!auto) { tries = 0; lastDir = 1; } retried = false; waitOnline = false;
     label(); setState('loading', auto ? statusKey : '');
     start(item);
     if (navigator.mediaSession && window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: item.n, artist: 'LXA Radio' });
@@ -205,7 +227,8 @@
   function step(dir) {
     var key = current ? current.cat : activeCatKey(), c = cat(key);
     if (!c || !c.items.length) { fetchList().then(function () { var d = cat(activeCatKey()); if (d && d.items.length) play(d.id, 0, false); }).catch(function () { /* message shown */ }); return; }
-    var from = current ? current.i : (dir > 0 ? -1 : 0), next = nextGood(key, from, dir);
+    var from = current ? curIndex() : (dir > 0 ? -1 : 0); if (current && from < 0) from = dir > 0 ? -1 : c.items.length;   // not in this list (hidden by a filter): start at the edge
+    var next = nextGood(key, from, dir);
     if (next === null) next = (from + dir + c.items.length) % c.items.length;
     play(key, next, false); lastDir = dir;
   }
@@ -213,7 +236,7 @@
   function toggle() {
     if (state === 'playing' || state === 'loading') { pause(); return; }
     fetchList().then(function () {
-      if (current && currentItem()) { play(current.cat, current.i, false); return; }   // resume = reload the live stream (a paused live stream would replay old audio)
+      if (current && currentItem()) { var at = curIndex(); play(current.cat, at >= 0 ? at : 0, false, at >= 0 ? undefined : current.item); return; }   // resume = reload the live stream (a paused live stream would replay old audio)
       var key = activeCatKey(), c = cat(key) || data.cats[0], idx = 0;
       if (saved.url) { var f = c.items.map(function (i) { return i.u; }).indexOf(saved.url); if (f >= 0) idx = f; else { var g = c.items.findIndex ? c.items.findIndex(function (i) { return !isBad(i.u); }) : 0; idx = g >= 0 ? g : 0; } }
       play(c.id, idx, false);
@@ -222,7 +245,7 @@
   function surprise() {
     fetchList().then(function () {
       var c = cat(activeCatKey()); if (!c || !c.items.length) return;
-      var pool = c.items.map(function (i, k) { return k; }).filter(function (k) { return !isBad(c.items[k].u) && !(current && current.cat === c.id && current.i === k); });
+      var pool = c.items.map(function (i, k) { return k; }).filter(function (k) { return !isBad(c.items[k].u) && !(current && current.cat === c.id && current.u === c.items[k].u); });
       if (!pool.length) return; play(c.id, pool[Math.floor(Math.random() * pool.length)], false); afterPick();
     }).catch(function () { setState('error', 'fail'); });
   }
@@ -251,7 +274,7 @@
   nextBtn.addEventListener('click', function () { step(1); });
   toggleBtn.addEventListener('click', function () { openPanel(panel.hidden); });
   titleBtn.addEventListener('click', function () { openPanel(panel.hidden); });
-  searchEl.addEventListener('input', renderList);
+  searchEl.addEventListener('input', function () { renderSub(); renderList(); });
   diceBtn.addEventListener('click', surprise);
   favBtn.addEventListener('click', function () { viewButton('fav'); });
   recentBtn.addEventListener('click', function () { viewButton('recent'); });
