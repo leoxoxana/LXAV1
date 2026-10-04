@@ -194,13 +194,13 @@
       var li = document.createElement('li'); li.className = 'radio-row-li';
       var b = document.createElement('button'); b.type = 'button'; b.className = 'radio-st';
       var on = now && now.u === r.it.u; if (on) { b.classList.add('on'); b.setAttribute('aria-current', 'true'); }
-      if (badMap[r.it.u]) b.classList.add('bad');
+      if (badMap[r.it.u] || (view === 'find' && findBad(r.it.u))) b.classList.add('bad');
       var name = document.createElement('span'); name.className = 'radio-st-name';
       if (view === 'cat' && !q && r.it.top) { var top = document.createElement('span'); top.className = 'radio-top'; top.textContent = '🔥'; top.setAttribute('aria-hidden', 'true'); name.appendChild(top); }   // 🔥 = one of the three most popular stations of the category (flag from the server); it sits INSIDE the name, so the row layout (name left, quality right) stays the same
       name.appendChild(document.createTextNode(r.it.n));
-      var meta = document.createElement('small'); meta.textContent = (r.it.mine ? '🔗 ' : '') + (r.cid === 'manele' && r.it.s ? r.it.s.map(function (s) { return STYLE_ICON[s] || ''; }).join('') + ' ' : '') + (r.it.f ? r.it.f + ' · ' : '') + (r.it.cc && r.it.cc !== 'RO' ? r.it.cc + ' · ' : '') + r.it.c + (r.it.b ? ' ' + r.it.b : '');
+      var meta = document.createElement('small'); meta.textContent = (r.it.mine ? '🔗 ' : '') + (r.cid === 'manele' && r.it.s ? r.it.s.map(function (s) { return STYLE_ICON[s] || ''; }).join('') + ' ' : '') + (view === 'find' && findBad(r.it.u) ? '❌ ' + findBad(r.it.u) + ' · ' : '') + (r.it.f ? r.it.f + ' · ' : '') + (r.it.cc && r.it.cc !== 'RO' ? r.it.cc + ' · ' : '') + r.it.c + (r.it.b ? ' ' + r.it.b : '');
       b.appendChild(name); b.appendChild(meta);
-      b.addEventListener('click', function () { if (r.i >= 0) play(r.cid, r.i, false); else { var cc = cat(r.cid), k = cc ? indexOfUrl(cc.items, r.it.u) : -1; play(r.cid, k >= 0 ? k : 0, false, k >= 0 ? undefined : r.it); } afterPick(); });
+      b.addEventListener('click', function () { if (view === 'find') { precheck(r, b); return; } if (r.i >= 0) play(r.cid, r.i, false); else { var cc = cat(r.cid), k = cc ? indexOfUrl(cc.items, r.it.u) : -1; play(r.cid, k >= 0 ? k : 0, false, k >= 0 ? undefined : r.it); } afterPick(); });
       var star = document.createElement('button'); star.type = 'button'; star.className = 'radio-star'; var isF = faved.indexOf(r.it.u) !== -1;
       star.textContent = isF ? '★' : '☆'; star.setAttribute('aria-pressed', isF ? 'true' : 'false'); star.setAttribute('aria-label', (isF ? L().delFav : L().addFav) + ': ' + r.it.n); star.classList.toggle('on', isF);
       star.addEventListener('click', function () { toggleFav(r.it); if (view === 'fav') { renderList(); } else { var f = isFav(r.it.u); star.textContent = f ? '★' : '☆'; star.setAttribute('aria-pressed', f ? 'true' : 'false'); star.classList.toggle('on', f); star.setAttribute('aria-label', (f ? L().delFav : L().addFav) + ': ' + r.it.n); } });
@@ -401,9 +401,9 @@
 
   // ---- RECOMMEND (from the frequency search): POST {action:'recommend', u, id, token}; the answer says what happened (nothing is published, the owner decides)
   var RECT = {
-    de: { btn: 'Sender empfehlen', login: 'Bitte einloggen, um zu empfehlen.', RECOMMENDED: 'Empfohlen – der Admin prüft es.', ALREADY: 'Schon empfohlen.', EXISTS: 'Schon in der Liste.', APPROVED: 'Schon in der Liste.', REJECTED: 'Wurde bereits abgelehnt.', UNKNOWN: 'Sender nicht erkannt – bitte neu suchen.', LIMIT: 'Zu viele Empfehlungen, später wieder.', fail: 'Nicht gesendet – Netzwerk / Server.', stream: 'Stream: ' },
-    ro: { btn: 'Recomandă postul', login: 'Intră în cont ca să recomanzi.', RECOMMENDED: 'Recomandat – adminul îl verifică.', ALREADY: 'Ai recomandat deja.', EXISTS: 'E deja în listă.', APPROVED: 'E deja în listă.', REJECTED: 'A fost deja respins.', UNKNOWN: 'Post necunoscut – caută din nou.', LIMIT: 'Prea multe recomandări, încearcă mai târziu.', fail: 'Netrimis – rețea / server.', stream: 'Stream: ' },
-    en: { btn: 'Recommend station', login: 'Log in to recommend.', RECOMMENDED: 'Recommended – the admin will review it.', ALREADY: 'Already recommended.', EXISTS: 'Already in the list.', APPROVED: 'Already in the list.', REJECTED: 'Already rejected.', UNKNOWN: 'Unknown station – search again.', LIMIT: 'Too many recommendations, try later.', fail: 'Not sent – network / server.', stream: 'Stream: ' }
+    de: { btn: 'Sender empfehlen', login: 'Bitte einloggen, um zu empfehlen.', RECOMMENDED: 'Empfohlen – der Admin prüft es.', ALREADY: 'Schon empfohlen.', EXISTS: 'Schon in der Liste.', APPROVED: 'Schon in der Liste.', REJECTED: 'Wurde bereits abgelehnt.', UNKNOWN: 'Sender nicht erkannt – bitte neu suchen.', LIMIT: 'Zu viele Empfehlungen, später wieder.', fail: 'Nicht gesendet – Netzwerk / Server.', stream: 'Stream: ', checking: 'Sender wird geprüft…', noCheck: 'Prüfung nicht möglich – Sender wird direkt versucht.', degraded: 'Stream läuft, aber instabil.', states: { OFFLINE: 'Offline – antwortet nicht', 'NO AUDIO': 'Kein Audio im Stream', UNSUPPORTED: 'Format nicht unterstützt', INVALID: 'Ungültiger Stream', DEGRADED: 'Instabil' } },
+    ro: { btn: 'Recomandă postul', login: 'Intră în cont ca să recomanzi.', RECOMMENDED: 'Recomandat – adminul îl verifică.', ALREADY: 'Ai recomandat deja.', EXISTS: 'E deja în listă.', APPROVED: 'E deja în listă.', REJECTED: 'A fost deja respins.', UNKNOWN: 'Post necunoscut – caută din nou.', LIMIT: 'Prea multe recomandări, încearcă mai târziu.', fail: 'Netrimis – rețea / server.', stream: 'Stream: ', checking: 'Se verifică postul…', noCheck: 'Verificarea nu a mers – încerc direct postul.', degraded: 'Stream-ul merge, dar e instabil.', states: { OFFLINE: 'Offline – nu răspunde', 'NO AUDIO': 'Fără audio în stream', UNSUPPORTED: 'Format nesuportat', INVALID: 'Stream invalid', DEGRADED: 'Instabil' } },
+    en: { btn: 'Recommend station', login: 'Log in to recommend.', RECOMMENDED: 'Recommended – the admin will review it.', ALREADY: 'Already recommended.', EXISTS: 'Already in the list.', APPROVED: 'Already in the list.', REJECTED: 'Already rejected.', UNKNOWN: 'Unknown station – search again.', LIMIT: 'Too many recommendations, try later.', fail: 'Not sent – network / server.', stream: 'Stream: ', checking: 'Checking the station…', noCheck: 'Check unavailable – trying the station directly.', degraded: 'The stream plays but is unstable.', states: { OFFLINE: 'Offline – not answering', 'NO AUDIO': 'No audio in the stream', UNSUPPORTED: 'Format not supported', INVALID: 'Invalid stream', DEGRADED: 'Unstable' } }
   };
   var REC = function () { var l = typeof lang === 'string' ? lang : ''; return RECT[l] || RECT.en; };
   function recommend(item, button) {
@@ -415,6 +415,27 @@
       .then(function (r) { return r.json().catch(function () { return {}; }); })
       .then(function (r) { var key = r.state; say(r.ok ? (REC()[key] || REC().RECOMMENDED) + (r.vstate && r.vstate !== 'VALID' && key === 'RECOMMENDED' ? ' ' + REC().stream + r.vstate : '') : (key === 'LOGIN' ? REC().login : (REC()[key] || REC().fail))); if (!(r.ok && key === 'RECOMMENDED')) button.disabled = key === 'ALREADY' || key === 'EXISTS' || key === 'APPROVED' || key === 'REJECTED'; else { button.textContent = '✅'; } })
       .catch(function () { button.disabled = false; say(REC().fail); });
+  }
+
+  // ---- CHECK BEFORE PLAY (frequency search): the stream is verified by the SERVER first (~2 s, answers of the last minutes are reused); a station that does not play is NOT started, its real state is shown.
+  // If the server cannot be asked at all (network / 503) the station is tried as it is (fail-open), the normal error handling of the player takes over.
+  var findState = {};
+  var findBad = function (u) { var x = findState[u]; return x && !x.ok && Date.now() - x.at < 60000 ? x.state : ''; };
+  function precheck(r, button) {
+    var msg = $('radioFindMsg'), say = function (t) { if (msg) msg.textContent = t; }, u = r.it.u, hit = findState[u];
+    var go = function () { unlocking = false; if (r.i >= 0) play(r.cid, r.i, false); afterPick(); };
+    if (button.dataset.busy) return;
+    if (hit && hit.ok && Date.now() - hit.at < 600000) { go(); return; }
+    button.dataset.busy = '1'; button.classList.add('checking'); say('⏳ ' + REC().checking); unlockAudio();
+    fetch('/api/radio', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'check', u: u, fast: true }) })
+      .then(function (res) { return res.ok ? res.json() : null; }).catch(function () { return null; })
+      .then(function (res) {
+        delete button.dataset.busy; button.classList.remove('checking');
+        if (!res || res.error) { say(REC().noCheck); go(); return; }
+        var state = String(res.state || (res.ok ? 'VALID' : 'INVALID')); findState[u] = { ok: !!res.ok, state: state, at: Date.now() };
+        if (res.ok) { say(state === 'DEGRADED' ? REC().degraded : ''); go(); return; }
+        relock(); say(r.it.n + ' – ' + (REC().states[state] || state)); renderList();
+      });
   }
   // ---- FIND: any country, exact frequency, auto scanner (data comes from the directory through /api/radio?browse=...; the frequency is read from station names, so a station that does not write it cannot be found)
   var fb = $('radioFindBtn'), fbox = $('radioFind'), fcc = $('radioFindCc'), ff = $('radioFindF'), fgo = $('radioFindGo'), sa = $('radioScanA'), sb = $('radioScanB'), sgo = $('radioScanGo'), fclose = $('radioFindClose'), fmsg = $('radioFindMsg');

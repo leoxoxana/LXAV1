@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 const DEDUPE_MS = 10 * 60 * 1000;        // the same device reporting the same station the same way within 10 min counts once
 const MAX_DEVICES = 40;                  // devices remembered per station (oldest dropped): the node stays small
-const MAX_BODY = 1500;
+const MAX_BODY = 6000;   // room for a long directory address (tracking tokens) in check / recommend; the report fields keep their own limits
 const LIMIT_PER_HOUR = 30, LIMIT_DEVICES = 5000;
 const NETS = new Set(['slow-2g', '2g', '3g', '4g', '5g', 'wifi']);
 

@@ -32,14 +32,14 @@ async function assertPublic(hostname, lookup = (name, options) => dns.promises.l
   try { const found = await lookup(host, { all: true }); return Array.isArray(found) && found.length > 0 && found.every(entry => !privateIp(entry.address)); } catch (error) { return false; }
 }
 // a link as the player typed it -> a clean absolute http(s) address, or '' (no user:password@, no fragment, no private literal)
-function cleanStreamUrl(raw) {
-  const text = String(raw || '').trim(); if (!text || text.length > MAX_URL) return '';
+function cleanStreamUrl(raw, max = MAX_URL) {   // max: only for an address the SERVER itself took from the directory (long tracking tokens); players' input keeps the 400 limit
+  const text = String(raw || '').trim(); if (!text || text.length > max) return '';
   let url; try { url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(text) ? text : 'https://' + text); } catch (error) { return ''; }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return '';
   if (url.username || url.password || !url.hostname) return '';
   const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal') || (net.isIP(host) && privateIp(host))) return '';
-  url.hash = ''; const out = url.href; return out.length > MAX_URL ? '' : out;
+  url.hash = ''; const out = url.href; return out.length > max ? '' : out;
 }
 const withHttps = url => url.replace(/^http:\/\//i, 'https://');
 const hasQuery = url => { try { return Boolean(new URL(url).search); } catch (error) { return false; } };

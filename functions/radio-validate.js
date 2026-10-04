@@ -13,7 +13,7 @@ const UA = 'LXAV1-radio/1.0 (+https://lxoxa.vercel.app)';
 // ---- canonical identity of a stream address (a STRING: hash it with radio-reports.radioKey for a node key)
 const TRACKING = /^(utm_[a-z]+|fbclid|gclid|ref|source)$/i;
 function canonicalStream(raw) {
-  const clean = custom.cleanStreamUrl(raw); if (!clean) return '';
+  const clean = custom.cleanStreamUrl(raw, 4000); if (!clean) return '';
   let url; try { url = new URL(clean); } catch (error) { return ''; }
   const host = url.hostname.replace(/^www\./i, '').toLowerCase();
   const port = url.port && url.port !== '80' && url.port !== '443' ? ':' + url.port : '';   // 80 / 443 are the same whichever scheme was typed
@@ -73,7 +73,7 @@ function analyze(buf) {
 const sleep = ms => new Promise(resolve => setTimeout(resolve, Math.max(0, ms)));
 async function readAudio(rawUrl, deps = {}) {
   const durationMs = deps.durationMs || READ_MS, maxBytes = deps.maxBytes || READ_MAX_BYTES, fetchFn = deps.fetchFn || ((...args) => fetch(...args));
-  let url = custom.cleanStreamUrl(rawUrl); if (!url) return { error: 'bad-url' };
+  let url = custom.cleanStreamUrl(rawUrl, deps.maxUrl); if (!url) return { error: 'bad-url' };
   const controller = new AbortController(), began = Date.now(), connectTimer = setTimeout(() => controller.abort(), deps.connectMs || 8000);
   try {
     let response = null;
@@ -82,7 +82,7 @@ async function readAudio(rawUrl, deps = {}) {
       response = await fetchFn(url, { signal: controller.signal, redirect: 'manual', headers: { 'user-agent': UA, 'icy-metadata': '0', accept: '*/*' } });
       if (response.status >= 300 && response.status < 400 && response.headers.get('location')) {
         try { response.body && Promise.resolve(response.body.cancel()).catch(() => {}); } catch (error) { /* ignore */ }
-        url = custom.cleanStreamUrl(new URL(response.headers.get('location'), url).href); if (!url) return { error: 'bad-redirect' }; response = null; continue;
+        url = custom.cleanStreamUrl(new URL(response.headers.get('location'), url).href, deps.maxUrl); if (!url) return { error: 'bad-redirect' }; response = null; continue;
       }
       break;
     }
@@ -128,7 +128,7 @@ async function readIcy(rawUrl, deps = {}) {
     for (let hop = 0; hop <= MAX_HOPS; hop++) {
       if (!(await custom.assertPublic(new URL(url).hostname, deps.lookup))) return { ok: false, why: 'blocked' };
       response = await fetchFn(url, { signal: controller.signal, redirect: 'manual', headers: { 'user-agent': UA, 'icy-metadata': '1', accept: '*/*' } });
-      if (response.status >= 300 && response.status < 400 && response.headers.get('location')) { try { response.body && Promise.resolve(response.body.cancel()).catch(() => {}); } catch (error) { /* ignore */ } url = custom.cleanStreamUrl(new URL(response.headers.get('location'), url).href); if (!url) return { ok: false, why: 'bad-redirect' }; response = null; continue; }
+      if (response.status >= 300 && response.status < 400 && response.headers.get('location')) { try { response.body && Promise.resolve(response.body.cancel()).catch(() => {}); } catch (error) { /* ignore */ } url = custom.cleanStreamUrl(new URL(response.headers.get('location'), url).href, deps.maxUrl); if (!url) return { ok: false, why: 'bad-redirect' }; response = null; continue; }
       break;
     }
     if (!response || !response.ok || !response.body) return { ok: false, why: 'http' };

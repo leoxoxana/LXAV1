@@ -51,6 +51,22 @@ describe('handler + check', () => {
     expect((await post('http://127.0.0.1/s')).ok).toBe(false); expect((await post('http://169.254.169.254/latest')).ok).toBe(false);
     radio.__setValidator(null);
   });
+  test('fast CHECK (before PLAY): ~1.5 s read, no page resolving for an address the server returned, answers reused (10 min ok / 1 min failed), other addresses still resolved', async () => {
+    radio.__resetCheckCache(); let calls = 0, lastOpts = null;
+    radio.__setBrowser({ lookup: key => (key === validate.canonicalStream('https://known.example.com/live') ? { n: 'K', u: 'https://known.example.com/live' } : null) });
+    radio.__setValidator(async (url, opts) => { calls++; lastOpts = opts; return url.includes('dead') ? { ok: false, why: 'unreachable' } : { ok: true, url, codec: 'MP3' }; });
+    const post = (u, ip, fast = true) => radio.handler({ httpMethod: 'POST', headers: { 'x-forwarded-for': ip }, body: JSON.stringify({ action: 'check', u, fast }) }).then(r => JSON.parse(r.body));
+    const a = await post('https://known.example.com/live', '1.0.0.1'); expect(a).toMatchObject({ ok: true, state: 'VALID' }); expect(lastOpts.durationMs).toBe(1500); expect(typeof lastOpts.resolve).toBe('function');
+    const b = await post('https://known.example.com/live', '1.0.0.2'); expect(b.cached).toBe(true); expect(calls).toBe(1);
+    const c = await post('https://other.example.com/live', '1.0.0.3'); expect(c.ok).toBe(true); expect(lastOpts.resolve).toBeUndefined(); expect(lastOpts.durationMs).toBe(1500);
+    expect(await post('https://dead.example.com/x', '1.0.0.4')).toMatchObject({ ok: false, state: 'OFFLINE' }); expect((await post('https://dead.example.com/x', '1.0.0.5')).cached).toBe(true);
+    const LONG = 'https://long.example.com/live?token=' + 'x'.repeat(900); radio.__setBrowser({ lookup: key => (key === validate.canonicalStream(LONG) ? { n: 'L', u: LONG } : null) });
+    expect(await post(LONG, '1.0.0.7')).toMatchObject({ ok: true, state: 'VALID' }); expect(lastOpts.maxUrl).toBe(4000);   // a long directory address is checked (the server uses its own record)
+    expect((await post('https://nobody.example.com/live?t=' + 'y'.repeat(900), '1.0.0.8')).ok).toBe(false);   // a long address the server never returned is refused
+    radio.__setBrowser({ lookup: key => (key === validate.canonicalStream('https://known.example.com/live') ? { n: 'K', u: 'https://known.example.com/live' } : null) });
+    await post('https://known.example.com/live', '1.0.0.6', false); expect(lastOpts.durationMs).toBe(5000);   // the normal check keeps the full read
+    radio.__setBrowser(null); radio.__setValidator(null);
+  });
   test('stateOf covers the six states', () => {
     const s = validate.stateOf; expect(s({ ok: true })).toBe('VALID'); expect(s({ ok: true, warnings: ['x'] })).toBe('DEGRADED'); expect(s({ ok: false, why: 'unreachable' })).toBe('OFFLINE'); expect(s({ ok: false, why: 'not-audio' })).toBe('NO AUDIO'); expect(s({ ok: false, why: 'x', hls: true })).toBe('UNSUPPORTED'); expect(s({ ok: false, why: 'blocked' })).toBe('INVALID');
   });

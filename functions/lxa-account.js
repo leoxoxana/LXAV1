@@ -603,7 +603,7 @@ const accountHandler = async event => {
           await store.addRadioReject(key, { at: now, u: String(node.st.u), n: String(node.st.n || ''), orig: '', by });
           await store.updateRadioRecommend(key, current => (current && current.st ? { ...current, status: 'REJECTED', decidedAt: now } : current)); return json({ ok: true });
         }
-        const verdict = await radio.runValidator(String(node.st.u), { durationMs: op === 'rec-test' ? 8000 : 5000 });   // ALWAYS a fresh check: an old test is never trusted for a decision
+        const verdict = await radio.runValidator(String(node.st.u), { durationMs: op === 'rec-test' ? 8000 : 5000, maxUrl: 4000 });   // ALWAYS a fresh check: an old test is never trusted for a decision
         const fresh = { v: validate.compactVerdict(verdict), vstate: validate.stateOf(verdict), checkedAt: now };
         await store.updateRadioRecommend(key, current => (current && current.st ? { ...current, ...fresh } : current));
         if (op === 'rec-test') return json({ ok: true, ...fresh });

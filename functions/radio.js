@@ -502,22 +502,23 @@ async function healthSweep(storage, { max = 8, budgetMs = 25000, durationMs = 30
 // RECOMMEND: a LOGGED-IN player recommends a station he found by frequency. FREQUENCY != STREAM != APPROVAL != REPORT: this is its own record (Firebase radioRecommend/<key of the canonical stream>), always PENDING, and nothing here can publish.
 // The client sends only the stream address of a result the SERVER returned earlier (and an optional short message): name, frequency, country, city, source and id are read from the server's own record of that result,
 // the player is the verified session (never a body field), the verdict is the server's own stream check. Several players recommending the same stream share ONE record (players{}), a second tap of the same player changes nothing.
-const REC_LIMIT = 12;
+const REC_LIMIT = 12, LONG_URL = 4000;
 async function handleRecommend(body, event, storage) {
   const none = { 'cache-control': 'no-store' }, headers = (event && event.headers) || {};
   if (!storage || !storage.updateRadioRecommend) return reply({ error: 'unavailable' }, 503, none);
   let by = null; try { const verify = accountVerifier || require('./lxa-account').verifyPlayer; by = body.id !== undefined && body.token && verify ? await verify(body.id, String(body.token)) : null; } catch (error) { by = null; }
   if (!by) return reply({ ok: false, state: 'LOGIN' }, 401, none);
-  const input = custom.cleanStreamUrl(String(body.u || '').trim()); if (!input) return reply({ ok: false, state: 'INVALID' }, 400, none);
-  const canon = validate.canonicalStream(input), found = getBrowser().lookup(canon);
-  if (!found) return reply({ ok: false, state: 'UNKNOWN' }, 404, none);   // only a result the server itself returned can be recommended
+  const found = getBrowser().lookup(validate.canonicalStream(String(body.u || '').trim().slice(0, LONG_URL)));
+  if (!found) return reply({ ok: false, state: 'UNKNOWN' }, 404, none);   // only a result the server itself returned can be recommended (its own, possibly long, address is used from here on)
+  const input = custom.cleanStreamUrl(found.u, LONG_URL); if (!input) return reply({ ok: false, state: 'INVALID' }, 400, none);
+  const canon = validate.canonicalStream(input);   // only a result the server itself returned can be recommended
   if (!reports.allow('rec' + by.id, Date.now(), REC_LIMIT)) return reply({ ok: false, state: 'LIMIT' }, 429, none);
   try {
     const key = reports.radioKey(canon), known = await knownIndex(storage), rejected = (await storage.getRadioRejected()) || {};
     if (known.has(canon)) return reply({ ok: true, state: known.get(canon).where === 'approved' ? 'APPROVED' : 'EXISTS' }, 200, none);
     if (rejected[key]) return reply({ ok: true, state: 'REJECTED' }, 200, none);
     const message = String(body.msg || '').replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 140), now = Date.now();
-    const verdict = await validator(found.u, { durationMs: validate.READ_MS }), vstate = validate.stateOf(verdict);
+    const verdict = await validator(found.u, { durationMs: validate.READ_MS, maxUrl: LONG_URL }), vstate = validate.stateOf(verdict);
     let already = false, count = 0;
     await storage.updateRadioRecommend(key, current => {
       const node = current && current.st ? { ...current, players: { ...(current.players || {}) } } : { st: { n: found.n, u: found.u, canon, f: found.f, fs: found.fs, cc: found.cc, city: found.city, src: found.src, sid: found.sid, c: found.c, b: found.b }, players: {}, status: 'PENDING', first: now };
@@ -533,12 +534,24 @@ async function handleRecommend(body, event, storage) {
 }
 // CHECK: validates ONE stream for the player (VALID / INVALID with the reason) and saves nothing: used before playing a station found by frequency
 async function handleCheck(body, event) {
-  const raw = String(body.u || '').trim(), headers = (event && event.headers) || {}, who = String(headers['x-vercel-forwarded-for'] || headers['x-forwarded-for'] || 'anon').split(',')[0].trim();
-  const input = raw && raw.length <= custom.MAX_URL ? custom.cleanStreamUrl(raw) : null;
+  const fast0 = body.fast === true, raw = String(body.u || '').trim(), headers = (event && event.headers) || {}, who = String(headers['x-vercel-forwarded-for'] || headers['x-forwarded-for'] || 'anon').split(',')[0].trim();
+  const served = fast0 && raw ? getBrowser().lookup(validate.canonicalStream(raw.slice(0, LONG_URL))) : null;   // a fast check of a directory result the server returned: its own address is used (it may be longer than a player's link)
+  const input = served ? custom.cleanStreamUrl(served.u, LONG_URL) : (raw && raw.length <= custom.MAX_URL ? custom.cleanStreamUrl(raw) : null);
   if (!input) return reply({ ok: false, status: 'INVALID', why: raw ? blockedWhy(raw) : 'bad-url' }, 200, { 'cache-control': 'no-store' });
-  if (!reports.allow('chk' + who, Date.now(), 20)) return reply({ ok: false, status: 'INVALID', why: 'limit' }, 429, { 'cache-control': 'no-store' });
-  try { return reply(playerView(await validator(input, { durationMs: validate.READ_MS }), { queued: false }), 200, { 'cache-control': 'no-store' }); } catch (error) { return reply({ error: 'unavailable' }, 503, { 'cache-control': 'no-store' }); }
+  // fast mode (the check before PLAY in the frequency search): ~1.5 s of audio instead of 5 s, and the answer of the last minutes is reused (10 min when it plays, 1 min when it does not) so a station tapped twice is not probed twice
+  const fast = body.fast === true, key = validate.canonicalStream(input) || input, now = Date.now(), hit = fast ? checkCache.get(key) : null;
+  if (hit && now - hit.at < (hit.view.ok ? 10 * 60000 : 60000)) return reply({ ...hit.view, cached: true }, 200, { 'cache-control': 'no-store' });
+  if (!reports.allow('chk' + who, now, fast ? 90 : 20)) return reply({ ok: false, status: 'INVALID', why: 'limit' }, 429, { 'cache-control': 'no-store' });
+  try {
+    const known = fast && served, opts = { durationMs: fast ? 1500 : validate.READ_MS, ...(served ? { maxUrl: LONG_URL } : {}) };
+    if (known) opts.resolve = async url => ({ ok: true, url, name: '', codec: '' });   // an address the server itself returned from the directory (a direct stream): no playlist / page resolving; the SSRF check of every hop stays inside the audio read
+    const view = playerView(await validator(input, opts), { queued: false });
+    if (fast) { if (checkCache.size > 500) checkCache.delete(checkCache.keys().next().value); checkCache.set(key, { at: now, view }); }
+    return reply(view, 200, { 'cache-control': 'no-store' });
+  } catch (error) { return reply({ error: 'unavailable' }, 503, { 'cache-control': 'no-store' }); }
 }
+const checkCache = new Map();
+exports.__resetCheckCache = () => checkCache.clear();
 async function handleReport(event, storage) {
   const raw = String(event.body || ''); if (raw.length > reports.MAX_BODY) return reply({ error: 'Too large.' }, 413, { 'cache-control': 'no-store' });
   let body; try { body = JSON.parse(raw || '{}'); } catch (error) { return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' }); }
