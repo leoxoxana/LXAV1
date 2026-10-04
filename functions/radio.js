@@ -3,6 +3,10 @@
 // Source: Radio Browser (community directory, no key). Pipeline: Romanian stations per category (tags + name), HTTPS + MP3/AAC + direct url_resolved only,
 // de-duplicated, a REAL reachability probe (first bytes of audio), then - only where Romania has too few working stations - a few top-voted foreign ones.
 // The result is cached in memory and in Firebase (meta/radio), so a Radio Browser outage never empties the player: the last good list is served instead.
+const crypto = require('crypto'), fs = require('fs');
+// Version of the list builder = hash of this very file. A list stored (memory / Firebase) by a different version is rebuilt on the next request, so a deploy never keeps serving the list
+// of the previous code for the 12 h freshness window (that is exactly what kept 39 manele stations on the live site after the fix was deployed).
+const BUILDER_VERSION = (() => { try { return crypto.createHash('sha1').update(fs.readFileSync(__filename)).digest('hex').slice(0, 12); } catch (error) { return 'unknown'; } })();
 const SERVERS = ['https://de1.api.radio-browser.info', 'https://at1.api.radio-browser.info', 'https://nl1.api.radio-browser.info'];
 const USER_AGENT = 'LXAV1-radio/1.0 (+https://lxoxa.vercel.app)';
 const MAX_AGE_MS = 12 * 3600 * 1000;          // a stored list younger than this is served as is
@@ -186,10 +190,10 @@ async function saveStored(storage, data) { try { if (storage && storage.saveRadi
 async function getList({ refresh = false, storage, build = buildList, now = Date.now } = {}) {
   if (!memory) memory = await loadStored(storage);
   const age = memory ? now() - Number(memory.updatedAt || 0) : Infinity;
-  const needs = !memory || age > MAX_AGE_MS || (refresh && age > MIN_REFRESH_MS);
+  const needs = !memory || memory.v !== BUILDER_VERSION || age > MAX_AGE_MS || (refresh && age > MIN_REFRESH_MS);   // a list built by older code (or without a version) is never served as fresh
   if (!needs) return { data: memory, stale: false };
   try {
-    if (!building) building = build().then(async data => { if (total(data) < 10) throw new Error('too few stations'); memory = data; await saveStored(storage, data); return data; }).finally(() => { building = null; });
+    if (!building) building = build().then(async data => { if (total(data) < 10) throw new Error('too few stations'); data.v = BUILDER_VERSION; memory = data; await saveStored(storage, data); return data; }).finally(() => { building = null; });
     return { data: await building, stale: false };
   } catch (error) {
     if (memory) return { data: memory, stale: true };   // Radio Browser down: keep serving the last good list
@@ -205,10 +209,10 @@ exports.handler = async event => {
   let storage = null; try { storage = require('./firebase-storage'); } catch (error) { storage = null; }
   try {
     const { data, stale } = await getList({ refresh: String((event.queryStringParameters || {}).refresh || '') === '1', storage });
-    return reply({ ...data, stale }, 200, { 'cache-control': stale ? 'public, s-maxage=60' : 'public, s-maxage=900, stale-while-revalidate=3600' });
+    return reply({ ...data, stale }, 200, { 'cache-control': stale ? 'public, s-maxage=60' : 'public, s-maxage=300, stale-while-revalidate=900' });
   } catch (error) {
     return reply({ error: 'Radio list temporarily unavailable.' }, 503, { 'cache-control': 'no-store' });
   }
 };
-exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
+exports.BUILDER_VERSION = BUILDER_VERSION; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
 exports.__resetMemory = () => { memory = null; building = null; };

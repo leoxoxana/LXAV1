@@ -278,3 +278,35 @@ describe('MANELE keeps every working manele station', () => {
     for (const tags of ['manele,electro', 'manele,house', 'manele,minimal', 'manele,techno', 'manele,tehno']) expect(radio.styleOf(st({ tags }))).toContain('trap');
   });
 });
+
+describe('list version (a deploy must not keep serving the list of the previous code)', () => {
+  const big = (extra = {}) => ({ updatedAt: Date.now(), cats: [{ id: 'pop', emoji: 'x', label: 'POP', items: Array.from({ length: 12 }, (_, i) => ({ n: 'S' + i, u: 'https://x.example.ro/' + i, c: 'MP3', b: 128, cc: 'RO' })) }], ...extra });
+  beforeEach(() => radio.__resetMemory());
+
+  test('a stored list WITHOUT a version (built by older code) is rebuilt at once, although it is only minutes old', async () => {
+    let builds = 0;
+    const storage = { getRadioCache: async () => big(), saveRadioCache: async () => {} };
+    const result = await radio.getList({ storage, build: async () => { builds++; return big({ marker: 'new' }); } });
+    expect(builds).toBe(1); expect(result.data.marker).toBe('new');
+  });
+  test('a stored list with ANOTHER version is rebuilt; with the current version it is served as is', async () => {
+    let builds = 0; const build = async () => { builds++; return big({ marker: 'new' }); };
+    radio.__resetMemory();
+    const other = { getRadioCache: async () => big({ v: 'oldcode00000' }), saveRadioCache: async () => {} };
+    await radio.getList({ storage: other, build }); expect(builds).toBe(1);
+    radio.__resetMemory();
+    const same = { getRadioCache: async () => big({ v: radio.BUILDER_VERSION, marker: 'stored' }), saveRadioCache: async () => {} };
+    const result = await radio.getList({ storage: same, build }); expect(builds).toBe(1); expect(result.data.marker).toBe('stored');
+  });
+  test('a rebuilt list is stored with the current version', async () => {
+    let saved = null;
+    await radio.getList({ storage: { getRadioCache: async () => null, saveRadioCache: async data => { saved = data; } }, build: async () => big() });
+    expect(saved.v).toBe(radio.BUILDER_VERSION);
+    expect(radio.BUILDER_VERSION).toMatch(/^[0-9a-f]{12}$/);
+  });
+  test('if the rebuild fails the old-version list is still served (stale) instead of nothing', async () => {
+    const storage = { getRadioCache: async () => big({ v: 'oldcode00000' }), saveRadioCache: async () => {} };
+    const result = await radio.getList({ storage, build: async () => { throw new Error('down'); } });
+    expect(result.stale).toBe(true); expect(result.data.cats[0].items).toHaveLength(12);
+  });
+});

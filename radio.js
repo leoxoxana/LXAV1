@@ -8,7 +8,7 @@
   var playBtn = $('radioPlay'), prevBtn = $('radioPrev'), nextBtn = $('radioNext'), titleBtn = $('radioTitle'), nameEl = $('radioName'), statusEl = $('radioStatus'), volEl = $('radioVol'), toggleBtn = $('radioToggle'),
       panel = $('radioPanel'), catsEl = $('radioCats'), searchEl = $('radioSearch'), diceBtn = $('radioDice'), favBtn = $('radioFav'), recentBtn = $('radioRecent'), listEl = $('radioList'),
       subEl = $('radioSub'), sleepEl = $('radioSleep'), ecoEl = $('radioEco'), ecoLabel = $('radioEcoLabel'), msgEl = $('radioMsg');
-  var KEY = 'lxa-radio-v1', LIST_KEY = 'lxa-radio-list-v1', BAD_KEY = 'lxa-radio-bad-v1', FAV_KEY = 'lxa-radio-fav-v1', RECENT_KEY = 'lxa-radio-recent-v1';
+  var KEY = 'lxa-radio-v1', LIST_KEY = 'lxa-radio-list-v2', BAD_KEY = 'lxa-radio-bad-v1', FAV_KEY = 'lxa-radio-fav-v1', RECENT_KEY = 'lxa-radio-recent-v1';
   var LIST_TTL = 30 * 60 * 1000, BAD_TTL = 24 * 3600 * 1000, ECO_KBPS = 96, MAX_FAV = 60, MAX_RECENT = 5;
   var TEXT = {
     de: { pick: 'Sender wählen', search: 'Suchen…', loading: 'Lädt…', none: 'Keine Sender gefunden.', fail: 'Radio-Liste nicht erreichbar.', broken: 'Sender nicht erreichbar – nächster…', allbroken: 'Kein Sender in dieser Kategorie erreichbar.', reconnect: 'Verbindet neu…', offline: 'Offline – wartet auf Netz', error: 'Fehler',
