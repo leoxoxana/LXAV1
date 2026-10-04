@@ -6005,3 +6005,7 @@ html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-diff[data-l
 html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-diff[data-level="2"]{color:#eef1ff!important;text-shadow:0 0 8px rgba(238,241,255,.7),0 1px 0 rgba(0,0,0,.6)!important}
 /* BRUTTO: the label stays gold, the amount is bright white (not the same colour as the label) */
 html body:not(#_):not(#__):not(#___):not(#____) #winBoard .board-summary .board-total.gross-result b{color:#ffffff!important;text-shadow:0 0 10px rgba(255,255,255,.55)!important}
+/* playing station in the radio list: violet-magenta like the panel (was an orange that read as brown); BRUTTO amount in warm orange */
+html body:not(#_):not(#__):not(#___):not(#____) .radio-st.on{background:linear-gradient(90deg,rgba(168,85,247,.42),rgba(236,72,200,.26))!important;color:#fff!important;box-shadow:inset 3px 0 0 #e879f9!important}
+html body:not(#_):not(#__):not(#___):not(#____) .radio-st.on .radio-st-name::before{color:#f0abfc!important}
+html body:not(#_):not(#__):not(#___):not(#____) #winBoard .board-summary .board-total.gross-result b{color:#ffa24a!important;text-shadow:0 0 10px rgba(255,150,60,.6)!important}
