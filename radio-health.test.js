@@ -254,25 +254,42 @@ describe('blocked host (Radio Marketescu on radiolize.com does not play on the o
 describe('RETRO and GLOBAL categories (build)', () => {
   let n = 0;
   const st = (over = {}) => { n++; return { stationuuid: 'r' + n, name: 'Station R' + n, url_resolved: 'https://r' + n + '.example.ro/live', codec: 'MP3', bitrate: 128, lastcheckok: 1, hls: 0, ssl_error: 0, countrycode: 'RO', tags: 'pop', clickcount: 100 + n, votes: 10, ...over }; };
-  const run = (ro, global = [], probe = async () => true) => radio.buildList({ fetchRo: async () => ro, fetchRoAll: async () => [], fetchForeign: async () => [], fetchGlobal: async () => global, probe, now: Date.now });
+  const run = (ro, global = [], probe = async () => true) => radio.buildList({ fetchRo: async () => ro, fetchRoAll: async () => [], fetchForeign: async () => [], fetchGlobal: async () => global.map(s => ({ language: 'english', ...s })), probe, now: Date.now });
   const items = (data, id) => data.cats.find(c => c.id === id).items.map(i => i.n);
   test('RETRO: 80s / 90s / oldies stations (also "90\'s" in the name); manele "vechi" and folk are not retro', async () => {
     const data = await run([st({ name: "Play 90's", tags: '90s,pop' }), st({ name: 'Oldies FM', tags: 'oldies' }), st({ name: 'Radio 80s Hits', tags: '80s,hits' }), st({ name: 'Manele Vechi', tags: 'manele vechi,retro' }), st({ name: 'Folclor Retro', tags: 'folclor,retro' }), st({ name: 'Plain Pop', tags: 'pop' })]);
     expect(items(data, 'retro').sort()).toEqual(['Oldies FM', "Play 90's", 'Radio 80s Hits']);
     expect(items(data, 'manele')).toEqual(['Manele Vechi']);
   });
-  test('GLOBAL: the most listened music of the whole world that really plays, news / talk left out, foreign ones carry their country', async () => {
+  test('GLOBAL: the most listened English-language music of the whole world that really plays, news / talk left out, foreign ones carry their country', async () => {
     const world = [st({ name: 'BBC World News', countrycode: 'GB', tags: 'news', clickcount: 9000 }), st({ name: 'Big US Pop', countrycode: 'US', tags: 'pop', clickcount: 8000 }), st({ name: 'Dead DE', countrycode: 'DE', tags: 'pop', clickcount: 7000 }), st({ name: 'Good FR', countrycode: 'FR', tags: 'electro', clickcount: 6000 }), st({ name: 'Ro Top', countrycode: 'RO', tags: 'pop', clickcount: 5000 })];
     const dead = world[2].url_resolved;
     const data = await run([], world, async url => url !== dead);
     expect(items(data, 'global')).toEqual(['Big US Pop', 'Good FR', 'Ro Top']);
     expect(data.cats.find(c => c.id === 'global').items.map(i => i.cc)).toEqual(['US', 'FR', 'RO']);
   });
-  test('GLOBAL has at most 40 stations, 4 per country, one per name, and a failing global query does not break the rest of the build', async () => {
-    const countries = ['US', 'FR', 'DE', 'GB', 'JP', 'BR', 'IN', 'NG', 'ES', 'IT'], world = Array.from({ length: 90 }, (_, i) => st({ name: 'World ' + i, countrycode: countries[i % 10], clickcount: 9000 - i }));
+  test('GLOBAL is English only (the FIRST language listed), music only, ordered by recent clicks (votes only break ties), one query without the vote ranking', async () => {
+    const world = [
+      st({ name: 'Votes Farm', countrycode: 'DE', clickcount: 600, votes: 800000 }), st({ name: 'Busy English', countrycode: 'NG', clickcount: 4700, votes: 400 }), st({ name: 'Portuguese First', countrycode: 'BR', language: 'portuguese,english', clickcount: 9000 }),
+      st({ name: 'Spanish', countrycode: 'ES', language: 'spanish', clickcount: 9000 }), st({ name: 'No Language', countrycode: 'US', language: '', clickcount: 9000 }), st({ name: 'British English', countrycode: 'GB', language: 'british english', clickcount: 300, votes: 10 }),
+      st({ name: 'English Gospel', countrycode: 'US', tags: 'gospel,christian', clickcount: 5000 }), st({ name: 'English Talk', countrycode: 'US', tags: 'talk', clickcount: 5000 })];
+    const names = items(await run([], world), 'global');
+    expect(names).toEqual(['Busy English', 'Votes Farm', 'British English']);   // clicks first; 600 clicks with 800 000 votes does not beat 4700 clicks
+    expect(radio.isEnglish({ language: 'English' })).toBe(true); expect(radio.isEnglish({ language: 'english,german' })).toBe(true); expect(radio.isEnglish({ language: 'german,english' })).toBe(false); expect(radio.isEnglish({})).toBe(false); expect(radio.isEnglish({ language: 'englishman' })).toBe(false);
+    expect(radio.globalScore({ clickcount: 4700, votes: 400 })).toBeGreaterThan(radio.globalScore({ clickcount: 600, votes: 800000 }));
+  });
+  test('the GLOBAL query asks the directory for English only, ordered by clicks (not by votes)', async () => {
+    const seen = []; const real = global.fetch; global.fetch = async url => { seen.push(String(url)); return { ok: true, status: 200, json: async () => [] }; };
+    try { await radio.buildList({ fetchRo: async () => [], fetchRoAll: async () => [], fetchForeign: async () => [], probe: async () => true, now: Date.now }); } finally { global.fetch = real; }
+    const globalCalls = seen.filter(u => /language=english/.test(u)); expect(globalCalls).toHaveLength(1); expect(globalCalls[0]).toMatch(/order=clickcount/); expect(seen.some(u => /order=votes/.test(u))).toBe(false);
+  });
+  test('GLOBAL has at most 40 stations, 6 per country, one per name, and a failing global query does not break the rest of the build', async () => {
+    const many = ['US', 'FR', 'DE', 'GB', 'JP', 'BR', 'IN', 'NG', 'ES', 'IT'], bigWorld = Array.from({ length: 90 }, (_, i) => st({ name: 'Big World ' + i, countrycode: many[i % 10], clickcount: 9000 - i }));
+    expect(items(await run([st({ name: 'Local Pop', tags: 'pop' })], bigWorld), 'global')).toHaveLength(40);   // the list stops at 40
+    const countries = ['US', 'FR', 'DE'], world = Array.from({ length: 90 }, (_, i) => st({ name: 'World ' + i, countrycode: countries[i % 3], clickcount: 9000 - i }));
     const data = await run([st({ name: 'Local Pop', tags: 'pop' })], world);
-    expect(items(data, 'global')).toHaveLength(40);
-    const perCountry = {}; for (const i of data.cats.find(c => c.id === 'global').items) perCountry[i.cc] = (perCountry[i.cc] || 0) + 1; expect(Math.max(...Object.values(perCountry))).toBe(4);   // at most 4 per country: 10 countries x 4
+    expect(items(data, 'global')).toHaveLength(18);
+    const perCountry = {}; for (const i of data.cats.find(c => c.id === 'global').items) perCountry[i.cc] = (perCountry[i.cc] || 0) + 1; expect(Math.max(...Object.values(perCountry))).toBe(6);   // at most 6 per country: 3 countries x 6 = 18
     const broken = await radio.buildList({ fetchRo: async () => [st({ name: 'Local Pop', tags: 'pop' })], fetchRoAll: async () => [], fetchForeign: async () => [], fetchGlobal: async () => { throw new Error('boom'); }, probe: async () => true, now: Date.now });
     expect(items(broken, 'pop')).toEqual(['Local Pop']); expect(items(broken, 'global')).toEqual([]);
   });

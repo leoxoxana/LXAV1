@@ -144,11 +144,13 @@ async function defaultFetchRo(category) {
   const lists = await Promise.all([...category.queries.map(tag => radioBrowser(`${base}&countrycode=RO&limit=300&tag=${encodeURIComponent(tag)}`).catch(() => []))]);
   return lists.flat();
 }
-// the most listened stations of the whole world: the best by recent clicks and the best by votes
+// GLOBAL = the most listened ENGLISH-language music stations of the whole world (any country). "Most listened" = the recent clicks of the directory; the votes are a cumulative counter that
+// is easy to inflate (a station with 800 000 votes and 600 clicks), so they are not asked for any more and only break ties (see globalScore).
 async function defaultFetchGlobal() {
-  const lists = await Promise.all(['clickcount', 'votes'].map(order => radioBrowser(`/json/stations/search?hidebroken=true&order=${order}&reverse=true&limit=300`).catch(() => [])));
-  return lists.flat();
+  return radioBrowser('/json/stations/search?hidebroken=true&language=english&order=clickcount&reverse=true&limit=500').catch(() => []);
 }
+const isEnglish = station => /\benglish\b/.test(String(station.language || '').toLowerCase().split(',')[0].trim());   // the FIRST language listed is English ('english', 'british english'); a Portuguese station that also lists English is not
+const globalScore = station => Math.log10(1 + (Number(station.clickcount) || 0)) * 3 + Math.log10(1 + (Number(station.votes) || 0)) * 0.3 + (Number(station.bitrate) >= 96 ? 1 : Number(station.bitrate) >= 64 ? .5 : 0) + (codecOf(station) === 'AAC' ? .2 : 0);
 async function defaultFetchRoAll() { return radioBrowser(`${base}&countrycode=RO&limit=1000`).catch(() => []); }
 async function defaultFetchForeign(category) {
   const lists = await Promise.all(category.foreign.map(tag => radioBrowser(`/json/stations/search?hidebroken=true&order=votes&reverse=true&limit=80&tagExact=true&tag=${encodeURIComponent(tag)}`).catch(() => [])));
@@ -156,7 +158,7 @@ async function defaultFetchForeign(category) {
 }
 
 const STYLE_BONUS = { trap: 1.2, new: 0.4 };   // added to the popularity score of a manele station (trap = trap / techno / electro / house / minimal / club / dj)
-const ETNO_MAX = 60, GLOBAL_CANDIDATES = 160, GLOBAL_MAX = 40, GLOBAL_PER_COUNTRY = 4;   // folk / popular / ethno / party-only stations (tiers 3 and 4) are not manele: they go to ETNO
+const ETNO_MAX = 60, GLOBAL_CANDIDATES = 200, GLOBAL_MAX = 40, GLOBAL_PER_COUNTRY = 6;   // folk / popular / ethno / party-only stations (tiers 3 and 4) are not manele: they go to ETNO
 const maneleTier = item => { const s = item.s || []; if (s.includes('trap')) return 0; if (s.includes('folk') || s.includes('etno')) return 4; if (s.includes('new')) return 1; return item.m ? 2 : 3; };
 const notManele = item => maneleTier(item) >= 3;
 const publicItem = (station, foreign, categoryId) => {
@@ -191,9 +193,9 @@ async function buildList(deps = {}) {
     picked.set(category.id, [...chosen.values()].sort((a, b) => score(b) - score(a)));
   }
   // wanted (pinned) stations are probed FIRST, with the full timeout: they must not depend on how much of the time budget the bulk probing uses
-  // GLOBAL: the most listened music stations of the whole world (any country), probed together with the rest
+  // GLOBAL: the most listened English-language music stations of the whole world (any country), probed together with the rest
   const globalCandidates = [], seenGlobal = new Set();
-  try { for (const s of (await (deps.fetchGlobal || defaultFetchGlobal)()).filter(s => usable(s) && !NOT_MUSIC.test(textOf(s))).sort((a, b) => score(b) - score(a))) { const key = streamKey(streamUrl(s)); if (seenGlobal.has(key)) continue; seenGlobal.add(key); globalCandidates.push(s); if (globalCandidates.length >= GLOBAL_CANDIDATES) break; } } catch (error) { /* no global list this time: the rest of the build is not affected */ }
+  try { for (const s of (await (deps.fetchGlobal || defaultFetchGlobal)()).filter(s => usable(s) && isEnglish(s) && !NOT_MUSIC.test(textOf(s))).sort((a, b) => globalScore(b) - globalScore(a))) { const key = streamKey(streamUrl(s)); if (seenGlobal.has(key)) continue; seenGlobal.add(key); globalCandidates.push(s); if (globalCandidates.length >= GLOBAL_CANDIDATES) break; } } catch (error) { /* no global list this time: the rest of the build is not affected */ }
   const everything = [...picked.values()].flat();
   await probeMany(everything.filter(s => s.__pin));
   await probeMany([...everything, ...globalCandidates]);
@@ -441,4 +443,4 @@ exports.handler = async event => {
   }
 };
 exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.stationIndex = stationIndex; exports.MOVE_TARGETS = MOVE_TARGETS; exports.CUSTOM_TARGETS = CUSTOM_TARGETS; exports.__resetHidden = () => { servingCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
-exports.knownIndex = knownIndex; exports.healthSweep = healthSweep; exports.playerView = playerView; exports.__resetMemory = () => { memory = null; building = null; };
+exports.isEnglish = isEnglish; exports.globalScore = globalScore; exports.knownIndex = knownIndex; exports.healthSweep = healthSweep; exports.playerView = playerView; exports.__resetMemory = () => { memory = null; building = null; };
