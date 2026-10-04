@@ -6009,3 +6009,7 @@ html body:not(#_):not(#__):not(#___):not(#____) #winBoard .board-summary .board-
 html body:not(#_):not(#__):not(#___):not(#____) .radio-st.on{background:linear-gradient(90deg,rgba(168,85,247,.42),rgba(236,72,200,.26))!important;color:#fff!important;box-shadow:inset 3px 0 0 #e879f9!important}
 html body:not(#_):not(#__):not(#___):not(#____) .radio-st.on .radio-st-name::before{color:#f0abfc!important}
 html body:not(#_):not(#__):not(#___):not(#____) #winBoard .board-summary .board-total.gross-result b{color:#ffa24a!important;text-shadow:0 0 10px rgba(255,150,60,.6)!important}
+/* JACKPOT / 5-5 chip: no dark box; a soft pink-to-gold pill, the word in pink, the amount in bright jackpot yellow */
+html body:not(#_):not(#__):not(#___):not(#____) #winBoard .board-summary .board-total.mission-bonus{background:linear-gradient(90deg,rgba(255,60,200,.30),rgba(255,190,50,.24))!important;border:1px solid rgba(255,150,230,.65)!important;border-radius:999px!important;padding:2px 14px!important;box-shadow:0 0 14px rgba(255,90,220,.35)!important}
+html body:not(#_):not(#__):not(#___):not(#____) #winBoard .board-summary .board-total.mission-bonus span{color:#ff8be6!important;text-shadow:0 0 8px rgba(255,90,220,.6)!important}
+html body:not(#_):not(#__):not(#___):not(#____) #winBoard .board-summary .board-total.mission-bonus b{color:#ffe14a!important;text-shadow:0 0 10px rgba(255,200,40,.7)!important}
