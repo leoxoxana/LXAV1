@@ -168,6 +168,27 @@ async function getRadioFavCounts() {
   if (!db) return {};
   return (await db.ref('meta/radioFav').once('value')).val() || {};
 }
+// Stations of the players: links they offered (`radioSuggest/<key>`, one node per link), links the owner rejected (`meta/radioReject/<key>`), stations the owner approved (`meta/radioCustom/<key>`),
+// and a counter of suggestions per day (`meta/radioSuggestDay` = {day, n}) that keeps the whole thing bounded.
+async function updateRadioSuggest(key, mutate) {
+  initFirebase();
+  if (!db) throw new Error('Firebase not initialized');
+  const result = await db.ref(`radioSuggest/${key}`).transaction(current => mutate(current || null));
+  if (!result.committed) throw new Error('Suggestion did not commit');
+}
+async function getRadioSuggest() { initFirebase(); if (!db) return {}; return (await db.ref('radioSuggest').once('value')).val() || {}; }
+async function removeRadioSuggest(key) { initFirebase(); if (!db) throw new Error('Firebase not initialized'); await db.ref(`radioSuggest/${key}`).remove(); }
+async function getRadioRejected() { initFirebase(); if (!db) return {}; return (await db.ref('meta/radioReject').once('value')).val() || {}; }
+async function addRadioReject(key) { initFirebase(); if (!db) throw new Error('Firebase not initialized'); await db.ref(`meta/radioReject/${key}`).set(Date.now()); }
+async function getRadioCustoms() { initFirebase(); if (!db) return {}; return (await db.ref('meta/radioCustom').once('value')).val() || {}; }
+async function setRadioCustom(key, value) { initFirebase(); if (!db) throw new Error('Firebase not initialized'); if (value) await db.ref(`meta/radioCustom/${key}`).set(value); else await db.ref(`meta/radioCustom/${key}`).remove(); }
+async function bumpSuggestDay(day, max) {
+  initFirebase();
+  if (!db) throw new Error('Firebase not initialized');
+  let allowed = false;
+  await db.ref('meta/radioSuggestDay').transaction(current => { const same = current && current.day === day; const n = same ? Number(current.n) || 0 : 0; allowed = n < max; return allowed ? { day, n: n + 1 } : (same ? current : { day, n }); });
+  return allowed;
+}
 const MAX_FAV_PER_DEVICE = 60;
 async function setRadioFav(key, device, on) {
   initFirebase();
@@ -252,6 +273,14 @@ module.exports = {
   setRadioMove,
   getRadioFavCounts,
   setRadioFav,
+  updateRadioSuggest,
+  getRadioSuggest,
+  removeRadioSuggest,
+  getRadioRejected,
+  addRadioReject,
+  getRadioCustoms,
+  setRadioCustom,
+  bumpSuggestDay,
   getRtpSettings,
   saveRtpSettings
 };

@@ -570,23 +570,45 @@ const accountHandler = async event => {
         const summary = health.summarize(reports, hidden); summary.reports.forEach(row => { row.moved = (moves[row.key] && moves[row.key].cat) || ''; });
         return json({ ...summary, categories, stations, outdated: !cache || cache.v !== radio.BUILDER_VERSION, updatedAt: number(cache && cache.updatedAt), checkedAt: number(cache && (cache.checkedAt || cache.updatedAt)), dropped: cache && Array.isArray(cache.dropped) ? cache.dropped.slice(0, 40).map(d => ({ n: String(d.n || ''), u: String(d.u || ''), at: number(d.at), key: health.radioKey(d.u) })) : [] });
       }
+      // STATIONS OF THE PLAYERS: the links they offered with the 📨 button (one row per link), test, approve into ANY of the 12 categories (it becomes a public station, at the top of that category),
+      // reject (the link never shows up again), remove an approved station
+      if (op === 'suggestions') {
+        const [suggest, customs] = await Promise.all([store.getRadioSuggest(), store.getRadioCustoms()]), radio = require('./radio');
+        const rows = Object.entries(suggest).filter(([, v]) => v && v.u).map(([k, v]) => { let host = '', path = ''; try { const u = new URL(v.u); host = u.host; path = u.pathname; } catch (error) { /* keep empty */ } return { key: k, u: String(v.u), host, path, query: Boolean(v.u.includes('?')), n: String(v.n || ''), count: Number(v.count) || 0, first: Number(v.first) || 0, last: Number(v.last) || 0 }; }).sort((a, b) => b.count - a.count || b.last - a.last).slice(0, 100);
+        const approved = Object.entries(customs).filter(([, v]) => v && v.u).map(([k, v]) => ({ key: k, n: String(v.n || ''), u: String(v.u), cat: v.cat, at: Number(v.at) || 0 })).sort((a, b) => b.at - a.at);
+        return json({ suggestions: rows, approved, targets: radio.CUSTOM_TARGETS });
+      }
+      if (op === 'sug-test' || op === 'sug-approve' || op === 'sug-reject' || op === 'custom-remove') {
+        if (!/^[0-9a-f]{16}$/.test(key)) return json({ error: 'Bad station key.' }, 400);
+        const radio = require('./radio');
+        if (op === 'custom-remove') { await store.setRadioCustom(key, null); return json({ ok: true }); }
+        const suggest = await store.getRadioSuggest(), node = suggest[key]; if (!node || !node.u) return json({ error: 'Suggestion not found.' }, 404);
+        if (op === 'sug-reject') { await store.removeRadioSuggest(key); await store.addRadioReject(key); return json({ ok: true }); }
+        if (op === 'sug-test') { const resolved = await require('./radio-custom').resolveStation(String(node.u)); const probe = resolved.ok ? await require('./radio-custom').probeSafe(resolved.url) : null; return json({ resolved, probe }); }
+        const cat = String(input.cat || ''); if (!radio.CUSTOM_TARGETS.includes(cat)) return json({ error: 'Bad category.' }, 400);
+        const name = String(input.name || node.n || '').replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 48); if (name.length < 2) return json({ error: 'Name too short.' }, 400);
+        const resolved = await require('./radio-custom').resolveStation(String(node.u)); if (!resolved.ok && input.force !== true) return json({ error: 'Does not play: ' + resolved.why, why: resolved.why }, 409);
+        const url = resolved.ok ? resolved.url : String(node.u);
+        await store.setRadioCustom(require('./radio-reports').radioKey(url), { u: url, n: name, c: (resolved.ok && resolved.codec) || '', b: (resolved.ok && resolved.bitrate) || 0, cat, at: Date.now() });   // stored under the key of the address that is PLAYED (hide / move / reports use the same key)
+        await store.removeRadioSuggest(key); return json({ ok: true });
+      }
       if (op === 'stations') {   // every station of the list once, with the categories it is in, whether it is moved / hidden (the station manager)
-        const [cache, hidden, moves] = await Promise.all([store.getRadioCache().catch(() => null), store.getRadioHidden(), store.getRadioMoves()]);
-        const radio = require('./radio'), index = radio.stationIndex(cache), labels = new Map(((cache && cache.cats) || []).map(cat => [cat.id, cat]));
-        const stations = [...index.values()].map(row => ({ key: row.key, n: row.n, c: row.c, b: row.b, cc: row.cc, cats: row.cats, moved: (moves[row.key] && moves[row.key].cat) || '', hidden: Boolean(hidden[row.key]) })).sort((a, b) => a.n.localeCompare(b.n));
+        const [cache, hidden, moves, customsRaw] = await Promise.all([store.getRadioCache().catch(() => null), store.getRadioHidden(), store.getRadioMoves(), store.getRadioCustoms()]);
+        const radio = require('./radio'), customs = Object.entries(customsRaw).filter(([, v]) => v && v.u).map(([k, v]) => ({ key: k, u: String(v.u), n: String(v.n || ''), c: String(v.c || ''), b: Number(v.b) || 0, cat: v.cat })), index = radio.stationIndex(cache, customs), labels = new Map(((cache && cache.cats) || []).map(cat => [cat.id, cat]));
+        const stations = [...index.values()].map(row => ({ key: row.key, n: row.n, c: row.c, b: row.b, cc: row.cc, custom: Boolean(row.custom), cats: row.cats, moved: (moves[row.key] && moves[row.key].cat) || '', hidden: Boolean(hidden[row.key]) })).sort((a, b) => a.n.localeCompare(b.n));
         return json({ outdated: !cache || cache.v !== radio.BUILDER_VERSION, stations, categories: radio.MOVE_TARGETS.filter(id => labels.has(id)).map(id => ({ id, emoji: labels.get(id).emoji, label: labels.get(id).label })) });
       }
       if (!/^[0-9a-f]{16}$/.test(key)) return json({ error: 'Bad station key.' }, 400);
       if (op === 'unmove') { await store.setRadioMove(key, null); return json({ ok: true }); }
       if (op === 'move') {
         const radio = require('./radio'), cat = String(input.cat || ''); if (!radio.MOVE_TARGETS.includes(cat)) return json({ error: 'Bad category.' }, 400);
-        const row = radio.stationIndex(await store.getRadioCache().catch(() => null)).get(key); if (!row) return json({ error: 'Station not found.' }, 404);
+        const row = radio.stationIndex(await store.getRadioCache().catch(() => null), Object.entries(await store.getRadioCustoms()).filter(([, v]) => v && v.u).map(([k, v]) => ({ key: k, u: String(v.u), n: String(v.n || ''), c: String(v.c || ''), b: Number(v.b) || 0, cat: v.cat }))).get(key); if (!row) return json({ error: 'Station not found.' }, 404);
         await store.setRadioMove(key, { u: row.u, n: String(row.n || '').slice(0, 60), cat, at: Date.now() }); return json({ ok: true });
       }
       const [reports, hidden] = await Promise.all([store.getRadioReports(), store.getRadioHidden()]), node = reports[key] || hidden[key] || null;
       if (op === 'unhide') { await store.setRadioHidden(key, null); return json({ ok: true }); }
       if (op === 'clear') { await store.clearRadioReport(key); return json({ ok: true }); }
-      const dropped = node ? null : (await store.getRadioCache().catch(() => null)), fromDropped = dropped && Array.isArray(dropped.dropped) ? dropped.dropped.find(d => health.radioKey(d.u) === key) : null, found = node || fromDropped || (dropped ? require('./radio').stationIndex(dropped).get(key) || null : null);   // any station of the list can be hidden, reported or not
+      const dropped = node ? null : (await store.getRadioCache().catch(() => null)), fromDropped = dropped && Array.isArray(dropped.dropped) ? dropped.dropped.find(d => health.radioKey(d.u) === key) : null, found = node || fromDropped || (dropped ? require('./radio').stationIndex(dropped, Object.entries(await store.getRadioCustoms()).filter(([, v]) => v && v.u).map(([k, v]) => ({ key: k, u: String(v.u), n: String(v.n || ''), c: String(v.c || ''), b: Number(v.b) || 0, cat: v.cat }))).get(key) || null : null);   // any station of the list can be hidden, reported or not
       if (!found || !found.u) return json({ error: 'Station not found.' }, 404);
       if (op === 'hide') { await store.setRadioHidden(key, { u: String(found.u), n: String(found.n || '').slice(0, 60), at: Date.now() }); return json({ ok: true }); }
       if (op === 'test') return json({ test: await require('./radio').diagnose(String(found.u)) });

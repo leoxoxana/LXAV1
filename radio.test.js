@@ -237,24 +237,34 @@ describe('styles of manele', () => {
     expect(etno['Radio Folclor'].s).toBeUndefined(); expect(etno['Antena Satelor'].s).toBeUndefined();
     expect(manele(data).some(i => i.h)).toBe(false);
   });
-  test('TASTE ORDER: trap / techno first, new next, manele, party-only (no word manele), folk and ethno LAST; nothing removed; the quality order is kept inside a tier', async () => {
-    const data = await run([
-      st({ name: 'Folk A', tags: 'folclor,petrecere', clickcount: 9000 }), st({ name: 'Etno B', tags: 'etno,manele', clickcount: 8000 }),
-      st({ name: 'Plain C', tags: 'manele,petrecere', clickcount: 7000 }), st({ name: 'Plain D', tags: 'manele', clickcount: 6000 }),
-      st({ name: 'New E', tags: 'manele noi', clickcount: 5000 }), st({ name: 'Old F', tags: 'manele vechi', clickcount: 4000 }),
-      st({ name: 'Trap G', tags: 'manele,trap', clickcount: 100 }), st({ name: 'Club H', tags: 'manele,club', clickcount: 50 }),
-      st({ name: 'Club Etno I', tags: 'manele,club,etno', clickcount: 10 }), st({ name: 'Party Z', tags: 'petrecere,populară', clickcount: 3000 })
-    ]);
-    expect(manele(data).map(i => i.n)).toEqual(['Trap G', 'Club H', 'Club Etno I', 'New E', 'Plain C', 'Plain D', 'Old F']);
-    expect(data.cats.find(c => c.id === 'etno').items.map(i => i.n)).toEqual(['Folk A', 'Etno B', 'Party Z']);   // folk / ethno / party-only are not manele: ETNO, by quality
+  const POP = (name, tags, votes, extra = {}) => st({ name, tags, votes, clickcount: 0, ...extra });
+  test('MANELE is ordered by popularity from OUTSIDE the site (votes in the directory), not by style tier; nothing is removed', async () => {
+    const data = await run([POP('Small Trap', 'manele,trap', 3), POP('Big Plain', 'manele', 800), POP('Mid Plain', 'manele,petrecere', 120), POP('Old One', 'manele vechi', 60), POP('New One', 'manele noi', 40)]);
+    expect(manele(data).map(i => i.n)).toEqual(['Big Plain', 'Mid Plain', 'New One', 'Old One', 'Small Trap']);   // New One (40 votes + the small "new" bonus) edges out Old One (60 votes)
+    expect(data.cats.find(c => c.id === 'etno').items).toHaveLength(0);
   });
-  test('the 🔥 top flag marks the three best by quality, not the first three after the taste order', async () => {
-    const data = await run([st({ name: 'Plain Big', tags: 'manele', clickcount: 9000 }), st({ name: 'Plain Mid', tags: 'manele', clickcount: 8000 }), st({ name: 'Plain Two', tags: 'manele', clickcount: 7000 }), st({ name: 'Plain Four', tags: 'manele', clickcount: 6000 }), st({ name: 'Trap Tiny', tags: 'manele,trap', clickcount: 1 })]);
-    const list = manele(data);
-    expect(list[0].n).toBe('Trap Tiny');                                 // first by taste ...
-    expect(list.filter(i => i.top).map(i => i.n).sort()).toEqual(['Plain Big', 'Plain Mid', 'Plain Two']);   // ... but not "top"
+  test('a small bonus for the styles he likes: at the same popularity trap / techno / electro / house first, then new, then plain / old', async () => {
+    const data = await run([POP('Plain A', 'manele', 100), POP('Old B', 'manele vechi', 100), POP('New C', 'manele noi', 100), POP('Techno D', 'manele,techno', 100), POP('Electro E', 'manele,electro', 100)]);
+    const names = manele(data).map(i => i.n); expect(names.slice(0, 2).sort()).toEqual(['Electro E', 'Techno D']); expect(names[2]).toBe('New C'); expect(names.slice(3).sort()).toEqual(['Old B', 'Plain A']);
   });
-  const etnoOf = data => data.cats.find(c => c.id === 'etno').items;
+  test('a tiny trap station does not beat a station that thousands vote for, a big trap station beats an equally big plain one', async () => {
+    const data = await run([POP('Tiny Trap', 'manele,trap', 2), POP('Huge Plain', 'manele', 700), POP('Big Trap', 'manele,electro', 700), POP('Big Plain', 'manele', 700)]);
+    const names = manele(data).map(i => i.n); expect(names[0]).toBe('Big Trap'); expect(names[names.length - 1]).toBe('Tiny Trap');
+  });
+  test('the listeners the stream server reports lift a station (the peak counts too); stations that report nothing are ranked by votes alone', async () => {
+    const quiet = POP('Quiet Votes', 'manele', 60), busy = POP('Busy Trap', 'manele,trap', 0), peak = POP('Peak Only', 'manele', 0);
+    const listeners = new Map([[busy.url_resolved, { now: 600, peak: 1500 }], [peak.url_resolved, { now: 0, peak: 900 }]]);
+    const data = await radio.buildList({ fetchRo: async () => [quiet, busy, peak], fetchRoAll: async () => [], fetchForeign: async () => [], fetchGlobal: async () => [], probe: async () => true, collectListeners: async () => listeners, now: Date.now });
+    expect(manele(data).map(i => i.n)).toEqual(['Busy Trap', 'Peak Only', 'Quiet Votes']);
+  });
+  test('a failing listener phase does not break the build', async () => {
+    const data = await radio.buildList({ fetchRo: async () => [POP('One', 'manele', 5)], fetchRoAll: async () => [], fetchForeign: async () => [], fetchGlobal: async () => [], probe: async () => true, collectListeners: async () => { throw new Error('boom'); }, now: Date.now });
+    expect(manele(data).map(i => i.n)).toEqual(['One']);
+  });
+  test('the 🔥 of MANELE = the three most popular manele (also when a small trap station would be first by taste)', async () => {
+    const data = await run([POP('Tiny Trap', 'manele,trap', 1), POP('Big', 'manele', 900), POP('Mid', 'manele', 500), POP('Low', 'manele', 300), POP('Lower', 'manele', 100)]);
+    expect(manele(data).filter(i => i.top).map(i => i.n).sort()).toEqual(['Big', 'Low', 'Mid']);
+  });  const etnoOf = data => data.cats.find(c => c.id === 'etno').items;
   test('ETNO holds the folk / popular / ethno / party-only stations, most listened first, as plain rows (no style mark); MANELE has none of them', async () => {
     const folk = ['A', 'B', 'C', 'D', 'E', 'F'].map((k, i) => st({ name: 'Folclor ' + k, tags: 'folclor,petrecere,manele vechi', clickcount: 5000 - i * 100 }));   // A is the most listened
     const etno = st({ name: 'Etno Only', tags: 'etno,manele', clickcount: 100 });

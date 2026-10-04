@@ -1,6 +1,6 @@
 // RADIO HEALTH: strict two-client probe, periodic re-check, anonymous player reports, owner's hide list + admin actions.
 jest.mock('./functions/firebase-storage.js', () => {
-  let accounts = {}, cache = null, reports = {}, hidden = {}, moves = {}, favs = {}; const favDev = new Set();
+  let accounts = {}, cache = null, reports = {}, hidden = {}, moves = {}, favs = {}, suggest = {}, rejected = {}, customs = {}, suggestDay = { day: '', n: 0 }; const favDev = new Set();
   const copy = v => (v === null || v === undefined ? v : JSON.parse(JSON.stringify(v)));
   return {
     getAccounts: async () => copy(accounts), saveAccounts: async n => { accounts = n; },
@@ -13,8 +13,12 @@ jest.mock('./functions/firebase-storage.js', () => {
     getRadioMoves: async () => copy(moves), setRadioMove: async (key, v) => { if (v) moves[key] = v; else delete moves[key]; },
     getRadioFavCounts: async () => copy(favs),
     setRadioFav: async (key, device, on) => { const id = device + key, had = favDev.has(id); if (on) favDev.add(id); else favDev.delete(id); const changed = had !== on; if (changed) { favs[key] = Math.max(0, (favs[key] || 0) + (on ? 1 : -1)); if (!favs[key]) delete favs[key]; } return { changed }; },
+    updateRadioSuggest: async (key, mutate) => { const next = mutate(copy(suggest[key])); if (next === undefined) throw new Error('no commit'); suggest[key] = next; }, getRadioSuggest: async () => copy(suggest), removeRadioSuggest: async key => { delete suggest[key]; },
+    getRadioRejected: async () => copy(rejected), addRadioReject: async key => { rejected[key] = 1; }, getRadioCustoms: async () => copy(customs), setRadioCustom: async (key, v) => { if (v) customs[key] = v; else delete customs[key]; },
+    bumpSuggestDay: async (day, max) => { if (!day || suggestDay.day !== day) suggestDay = { day, n: 0 }; if (suggestDay.n >= max) return false; suggestDay.n++; return true; },
+    __suggest: () => suggest, __customs: () => customs, __rejected: () => rejected,
     __moves: () => moves, __favs: () => favs, __setFavs: v => { favs = v; },
-    __reset: () => { accounts = {}; cache = null; reports = {}; hidden = {}; moves = {}; favs = {}; favDev.clear(); }, __put: (k, a) => { accounts[k] = a; }, __cache: c => { cache = c; }, __reports: () => reports, __hidden: () => hidden
+    __reset: () => { accounts = {}; cache = null; reports = {}; hidden = {}; moves = {}; favs = {}; suggest = {}; rejected = {}; customs = {}; suggestDay = { day: '', n: 0 }; favDev.clear(); }, __put: (k, a) => { accounts[k] = a; }, __cache: c => { cache = c; }, __reports: () => reports, __hidden: () => hidden
   };
 });
 
@@ -365,5 +369,93 @@ describe('stars (POST fav) feed TOP; admin moves', () => {
       expect((await call({ op: 'move', key: '0123456789abcdef', cat: 'etno' })).status).toBe(404);
       for (const cat of ['top', 'global', 'nope', '']) expect((await call({ op: 'move', key, cat })).status).toBe(400);
     });
+  });
+});
+describe('stations of the players: suggest (📨), resolve, approve into any of the 12 categories', () => {
+  const MINE = 'https://mine.example.ro/live', post = body => radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify(body) });
+  const suggest = (over = {}) => post({ action: 'suggest', u: MINE, n: 'My Radio', dev: 'suggestdevice0001', ...over });
+  const get = async () => JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body);
+  test('a suggestion is stored once per link; the players who sent it are counted (one per device)', async () => {
+    await stored(); expect((await suggest()).statusCode).toBe(200); await suggest(); await suggest({ dev: 'suggestdevice0002', n: 'Other Name' });
+    const rows = Object.values(storage.__suggest()); expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ u: MINE, n: 'My Radio', count: 2 });
+  });
+  test('refused: http, user:password@, private address, no device id, a junk body; and the 6th suggestion of one device within an hour', async () => {
+    await stored();
+    for (const bad of [{ u: 'http://mine.example.ro/x' }, { u: 'https://u:p@mine.example.ro/x' }, { u: 'https://127.0.0.1/x' }, { u: 'https://10.0.0.5/x' }, { dev: 'x' }, { u: '' }]) expect((await suggest(bad)).statusCode).toBe(400);
+    for (let i = 0; i < 5; i++) expect((await suggest({ u: 'https://m' + i + '.example.ro/s', dev: 'suggestdevice0009' })).statusCode).toBe(200);
+    expect((await suggest({ u: 'https://m6.example.ro/s', dev: 'suggestdevice0009' })).statusCode).toBe(429); expect(Object.keys(storage.__suggest())).toHaveLength(5);
+  });
+  test('a station that is in the list already is not stored again; the daily cap (200) stops a flood; the name is cleaned', async () => {
+    await stored(); expect(JSON.parse((await suggest({ u: URL_A })).body).known).toBe(true); expect(Object.keys(storage.__suggest())).toHaveLength(0);
+    await suggest({ n: '<b>Bold</b>\u0007 Name   here' }); expect(Object.values(storage.__suggest())[0].n).toBe('b Bold /b Name here');
+    for (let i = 0; i < 199; i++) await storage.bumpSuggestDay(new Date().toISOString().slice(0, 10), 200);
+    expect((await suggest({ u: 'https://flood.example.ro/s', dev: 'suggestdevice0007' })).statusCode).toBe(429);
+  });
+  test('GET ?resolve= answers with the resolver (stubbed here), no-store, and is limited to 12 per hour per visitor', async () => {
+    await stored(); radio.__setResolver(async input => ({ ok: true, url: input, name: 'X', codec: 'MP3' }));
+    try {
+      const res = await radio.handler({ httpMethod: 'GET', queryStringParameters: { resolve: 'https://a.example.ro/s' }, headers: { 'x-forwarded-for': '1.2.3.4' } });
+      expect(res.statusCode).toBe(200); expect(res.headers['cache-control']).toBe('no-store'); expect(JSON.parse(res.body)).toMatchObject({ ok: true, url: 'https://a.example.ro/s' });
+      let last; for (let i = 0; i < 12; i++) last = await radio.handler({ httpMethod: 'GET', queryStringParameters: { resolve: 'https://a.example.ro/s' }, headers: { 'x-forwarded-for': '1.2.3.4' } });
+      expect(last.statusCode).toBe(429);
+      expect((await radio.handler({ httpMethod: 'GET', queryStringParameters: { resolve: 'https://a.example.ro/s' }, headers: { 'x-forwarded-for': '5.6.7.8' } })).statusCode).toBe(200);
+    } finally { radio.__setResolver(null); }
+  });
+  describe('admin 📨', () => {
+    let call, key;
+    const setup = async () => {
+      jest.resetModules(); storage = require('./functions/firebase-storage.js'); storage.__reset(); radio = require('./functions/radio.js'); radio.__resetMemory(); radio.__resetHidden(); require('./functions/radio-reports.js').__resetLimiter();
+      storage.__put('1 : Boss', { id: 1, name: 'Boss', safeWord: 'pw', role: 'admin', balance: 100, difficulty: 2, createdAt: 1 });
+      storage.__cache({ updatedAt: Date.now(), v: radio.BUILDER_VERSION, cats: [{ id: 'manele', emoji: 'F', label: 'MANELE', items: [item('Alpha', URL_A)] }, { id: 'etno', emoji: 'E', label: 'ETNO', items: [] }, { id: 'pop', emoji: 'P', label: 'POP', items: [item('Gamma', URL_C)] }, { id: 'global', emoji: 'G', label: 'GLOBAL', items: [] }] });
+      const { handler } = require('./functions/lxa-account.js'); let ip = 0;
+      call = async data => { const r = await handler({ httpMethod: 'POST', headers: { 'x-vercel-forwarded-for': '10.6.0.' + (ip++ & 255) }, body: JSON.stringify({ action: 'admin-radio', id: 1, safeWord: 'pw', ...data }) }); return { status: r.statusCode, body: JSON.parse(r.body) }; };
+      await radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ action: 'suggest', u: MINE, n: 'My Radio', dev: 'suggestdevice0001' }) });
+      await radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ action: 'suggest', u: MINE, n: 'My Radio', dev: 'suggestdevice0002' }) });
+      key = health.radioKey(MINE);
+    };
+    const withResolver = async (fn, body) => { const custom = require('./functions/radio-custom.js'); const real = custom.resolveStation; custom.resolveStation = fn; try { return await body(); } finally { custom.resolveStation = real; } };
+    test('list: one row per link with the number of players, the 12 targets', async () => {
+      await setup(); const r = (await call({ op: 'suggestions' })).body;
+      expect(r.suggestions).toHaveLength(1); expect(r.suggestions[0]).toMatchObject({ key, host: 'mine.example.ro', path: '/live', count: 2, n: 'My Radio', query: false }); expect(r.targets).toHaveLength(12); expect(r.targets).toEqual(expect.arrayContaining(['top', 'global', 'manele', 'retro']));
+    });
+    test('approve into ANY of the 12 categories (also GLOBAL and TOP): the station is public at the top of it, one row less in the list, the suggestion is gone', async () => {
+      for (const cat of ['etno', 'global', 'top', 'manele']) {
+        await setup();
+        const r = await withResolver(async () => ({ ok: true, url: MINE, name: 'My Radio', codec: 'AAC', bitrate: 64 }), () => call({ op: 'sug-approve', key, cat, name: 'My Radio PUBLIC' }));
+        expect(r.body.ok).toBe(true); expect(Object.keys(storage.__suggest())).toHaveLength(0); expect(Object.values(storage.__customs())[0]).toMatchObject({ u: MINE, n: 'My Radio PUBLIC', cat, c: 'AAC', b: 64 });
+        radio.__resetHidden(); const served = (await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body, cats = JSON.parse(served).cats;
+        expect(cats.find(c => c.id === cat).items[0]).toMatchObject({ n: 'My Radio PUBLIC', u: MINE }); expect(cats.filter(c => c.items.some(i => i.u === MINE))).toHaveLength(1);
+      }
+    });
+    test('approve is refused: a category that is not one of the 12, a name that is too short, a stream that does not play (unless forced), an unknown key', async () => {
+      await setup();
+      expect((await call({ op: 'sug-approve', key, cat: 'nope', name: 'Okay' })).status).toBe(400); expect((await call({ op: 'sug-approve', key, cat: 'pop', name: 'x' })).status).toBe(400);
+      expect((await call({ op: 'sug-approve', key: '0123456789abcdef', cat: 'pop', name: 'Okay' })).status).toBe(404);
+      const bad = await withResolver(async () => ({ ok: false, why: 'unreachable' }), () => call({ op: 'sug-approve', key, cat: 'pop', name: 'Okay' })); expect(bad.status).toBe(409);
+      const forced = await withResolver(async () => ({ ok: false, why: 'unreachable' }), () => call({ op: 'sug-approve', key, cat: 'pop', name: 'Okay', force: true })); expect(forced.body.ok).toBe(true);
+    });
+    test('reject: the suggestion goes and the same link is accepted silently but never listed again; test returns the resolver answer; only the admin gets in', async () => {
+      await setup(); expect((await call({ op: 'suggestions' }, undefined)).status).toBe(200);
+      const t = await withResolver(async () => ({ ok: true, url: MINE, codec: 'MP3' }), () => call({ op: 'sug-test', key })); expect(t.body.resolved).toMatchObject({ ok: true, codec: 'MP3' });
+      expect((await call({ op: 'sug-reject', key })).body.ok).toBe(true); expect(Object.keys(storage.__suggest())).toHaveLength(0); expect(storage.__rejected()[key]).toBe(1);
+      expect((await radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ action: 'suggest', u: MINE, n: 'Again', dev: 'suggestdevice0003' }) })).statusCode).toBe(200); expect(Object.keys(storage.__suggest())).toHaveLength(0);
+    });
+    test('an approved station can be moved, hidden, starred and reported like any other; the station manager lists it flagged; remove deletes it', async () => {
+      await setup(); await withResolver(async () => ({ ok: true, url: MINE, name: 'Mine', codec: 'MP3' }), () => call({ op: 'sug-approve', key, cat: 'pop', name: 'Mine Public' }));
+      const stations = (await call({ op: 'stations' })).body.stations, row = stations.find(s => s.key === key); expect(row).toMatchObject({ n: 'Mine Public', custom: true, cats: ['pop'] });
+      expect((await call({ op: 'move', key, cat: 'etno' })).body.ok).toBe(true);
+      expect((await call({ op: 'hide', key })).body.ok).toBe(true);
+      const post = body => radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify(body) }); radio.__resetHidden();
+      expect((await post({ action: 'fav', u: MINE, on: true, dev: 'favdevice00000001' })).statusCode).toBe(200); expect((await post({ action: 'report', u: MINE, kind: 'manual', code: 'playing', dev: 'favdevice00000001' })).statusCode).toBe(200);
+      radio.__resetHidden(); expect(JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body).cats.some(c => c.items.some(i => i.u === MINE))).toBe(false);   // hidden
+      expect((await call({ op: 'custom-remove', key })).body.ok).toBe(true); expect(Object.keys(storage.__customs())).toHaveLength(0);
+    });
+  });
+  test('served list: customs go to the top of their category, replace a station with the same address, honour hide, and TOP takes customs first', () => {
+    const data = { cats: [{ id: 'manele', emoji: 'x', label: 'M', items: [item('Alpha', URL_A)] }, { id: 'pop', emoji: 'y', label: 'P', items: [item('Old Copy', MINE), item('Gamma', URL_C)] }, { id: 'global', emoji: 'g', label: 'G', items: [] }] };
+    const state = { hidden: new Set(), moves: new Map(), favs: new Map([[health.radioKey(URL_A), 3]]), customs: [{ key: health.radioKey(MINE), u: MINE, n: 'Mine', c: 'MP3', b: 128, cat: 'manele', at: 2 }, { key: health.radioKey('https://t.example.ro/s'), u: 'https://t.example.ro/s', n: 'Toppy', c: '', b: 0, cat: 'top', at: 1 }] };
+    const out = radio.servedList(data, state), by = id => out.cats.find(c => c.id === id).items.map(i => i.n);
+    expect(by('manele')).toEqual(['Mine', 'Alpha']); expect(by('pop')).toEqual(['Gamma']); expect(by('top')).toEqual(['Toppy', 'Alpha']);
+    const hid = radio.servedList(data, { ...state, hidden: new Set([health.radioKey(MINE)]) }); expect(hid.cats.find(c => c.id === 'manele').items.map(i => i.n)).toEqual(['Alpha']);
   });
 });
