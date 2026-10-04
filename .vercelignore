@@ -1,7 +1,5 @@
 # Not needed at runtime: kept locally / in git, not uploaded to the deployment.
 # (The site root is served as-is, so everything uploaded is reachable unless middleware.js blocks it.)
-docs-context
-scripts
 *.test.js
 audit-simulations.js
 deployment-check.js
@@ -9,17 +7,3 @@ local-server.js
 readme.md
 .eslintrc.json
 database.rules.json
-
-# Unreferenced source art (not linked from HTML/CSS/JS/manifest)
-assets/litere-leonxoxana-transparent.png
-assets/Litere cristaline*
-assets/ChatGPT Image*
-assets/icons/Embl*
-assets/lxa-header.gif
-assets/ezgif*
-assets/wild.webp
-assets/wild-tall.webp
-assets/wild-line.webp
-assets/icons/icon-192.png
-assets/icons/icon-512.png
-assets/icons/icon-512-maskable.png
