@@ -50,7 +50,7 @@
     {
       "files": ["header-fit.js", "boot-wild-preload.js", "sw-register.js", "radio.js", "admin-radio.js"],
       "env": { "browser": true, "es2021": true },
-      "globals": { "LXASpinButton": "readonly", "lang": "readonly", "lxaRequest": "readonly", "lxaAccount": "readonly", "renderAccountPanel": "readonly", "lxaRadioCache": "writable", "lxaConfirm": "readonly" }
+      "globals": { "LXASpinButton": "readonly", "lang": "readonly", "lxaRequest": "readonly", "lxaAccount": "readonly", "lxaToken": "readonly", "renderAccountPanel": "readonly", "lxaRadioCache": "writable", "lxaConfirm": "readonly" }
     },
     {
       "files": ["sw.js"],

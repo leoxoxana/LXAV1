@@ -177,9 +177,13 @@ async function updateRadioSuggest(key, mutate) {
   if (!result.committed) throw new Error('Suggestion did not commit');
 }
 async function getRadioSuggest() { initFirebase(); if (!db) return {}; return (await db.ref('radioSuggest').once('value')).val() || {}; }
+async function getRadioSuggestNode(key) { initFirebase(); if (!db) return null; return (await db.ref(`radioSuggest/${key}`).once('value')).val() || null; }
 async function removeRadioSuggest(key) { initFirebase(); if (!db) throw new Error('Firebase not initialized'); await db.ref(`radioSuggest/${key}`).remove(); }
 async function getRadioRejected() { initFirebase(); if (!db) return {}; return (await db.ref('meta/radioReject').once('value')).val() || {}; }
-async function addRadioReject(key) { initFirebase(); if (!db) throw new Error('Firebase not initialized'); await db.ref(`meta/radioReject/${key}`).set(Date.now()); }
+// a rejected link: the node keeps WHO sent it and WHAT it was (an old row is just the time stamp); the link never shows up again
+async function addRadioReject(key, record) { initFirebase(); if (!db) throw new Error('Firebase not initialized'); await db.ref(`meta/radioReject/${key}`).set(record && typeof record === 'object' ? record : Date.now()); }
+// the health of an APPROVED station (OK / DEGRADED / OFFLINE): only the `health` field changes, a station the owner removed meanwhile is NOT brought back
+async function patchRadioCustomHealth(key, health) { initFirebase(); if (!db) throw new Error('Firebase not initialized'); await db.ref(`meta/radioCustom/${key}`).transaction(current => (current && current.u ? { ...current, health } : current)); }
 async function getRadioCustoms() { initFirebase(); if (!db) return {}; return (await db.ref('meta/radioCustom').once('value')).val() || {}; }
 async function setRadioCustom(key, value) { initFirebase(); if (!db) throw new Error('Firebase not initialized'); if (value) await db.ref(`meta/radioCustom/${key}`).set(value); else await db.ref(`meta/radioCustom/${key}`).remove(); }
 async function bumpSuggestDay(day, max) {
@@ -276,8 +280,10 @@ module.exports = {
   updateRadioSuggest,
   getRadioSuggest,
   removeRadioSuggest,
+  getRadioSuggestNode,
   getRadioRejected,
   addRadioReject,
+  patchRadioCustomHealth,
   getRadioCustoms,
   setRadioCustom,
   bumpSuggestDay,

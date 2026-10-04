@@ -13,8 +13,8 @@ jest.mock('./functions/firebase-storage.js', () => {
     getRadioMoves: async () => copy(moves), setRadioMove: async (key, v) => { if (v) moves[key] = v; else delete moves[key]; },
     getRadioFavCounts: async () => copy(favs),
     setRadioFav: async (key, device, on) => { const id = device + key, had = favDev.has(id); if (on) favDev.add(id); else favDev.delete(id); const changed = had !== on; if (changed) { favs[key] = Math.max(0, (favs[key] || 0) + (on ? 1 : -1)); if (!favs[key]) delete favs[key]; } return { changed }; },
-    updateRadioSuggest: async (key, mutate) => { const next = mutate(copy(suggest[key])); if (next === undefined) throw new Error('no commit'); suggest[key] = next; }, getRadioSuggest: async () => copy(suggest), removeRadioSuggest: async key => { delete suggest[key]; },
-    getRadioRejected: async () => copy(rejected), addRadioReject: async key => { rejected[key] = 1; }, getRadioCustoms: async () => copy(customs), setRadioCustom: async (key, v) => { if (v) customs[key] = v; else delete customs[key]; },
+    updateRadioSuggest: async (key, mutate) => { const next = mutate(copy(suggest[key])); if (next === undefined) throw new Error('no commit'); suggest[key] = next; }, getRadioSuggest: async () => copy(suggest), getRadioSuggestNode: async key => copy(suggest[key]) || null, removeRadioSuggest: async key => { delete suggest[key]; },
+    getRadioRejected: async () => copy(rejected), addRadioReject: async (key, record) => { rejected[key] = record || 1; }, patchRadioCustomHealth: async (key, health) => { if (customs[key] && customs[key].u) customs[key] = { ...customs[key], health }; }, getRadioCustoms: async () => copy(customs), setRadioCustom: async (key, v) => { if (v) customs[key] = v; else delete customs[key]; },
     bumpSuggestDay: async (day, max) => { if (!day || suggestDay.day !== day) suggestDay = { day, n: 0 }; if (suggestDay.n >= max) return false; suggestDay.n++; return true; },
     __suggest: () => suggest, __customs: () => customs, __rejected: () => rejected,
     __moves: () => moves, __favs: () => favs, __setFavs: v => { favs = v; },
@@ -371,25 +371,30 @@ describe('stars (POST fav) feed TOP; admin moves', () => {
     });
   });
 });
-describe('stations of the players: suggest (📨), resolve, approve into any of the 12 categories', () => {
+describe('stations of the players: submit (validated by the server, saved automatically), resolve, approve into any of the 12 categories', () => {
   const MINE = 'https://mine.example.ro/live', post = body => radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify(body) });
-  const suggest = (over = {}) => post({ action: 'suggest', u: MINE, n: 'My Radio', dev: 'suggestdevice0001', ...over });
+  // the SERVER judges the stream (radio-validate.js): here its verdict is stubbed, the real checks are in radio-submit.test.js
+  const verdictOK = (u, over = {}) => ({ ok: true, url: u, name: '', codec: 'MP3', bitrate: 128, sampleRate: 44100, channels: 2, stable: true, stalls: 0, warnings: [], audio: true, hls: false, level: null, checkedAt: Date.now(), ...over });
+  const suggest = (over = {}) => { radio.__setValidator(async input => verdictOK(input)); return post({ action: 'submit', u: MINE, n: 'My Radio', dev: 'suggestdevice0001', ...over }); };
+  const withValidate = async (fn, body) => { const validate = require('./functions/radio-validate.js'); const real = validate.validateStream; validate.validateStream = fn; try { return await body(); } finally { validate.validateStream = real; } };
   const get = async () => JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body);
   test('a suggestion is stored once per link; the players who sent it are counted (one per device)', async () => {
     await stored(); expect((await suggest()).statusCode).toBe(200); await suggest(); await suggest({ dev: 'suggestdevice0002', n: 'Other Name' });
-    const rows = Object.values(storage.__suggest()); expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ u: MINE, n: 'My Radio', count: 2 });
+    const rows = Object.values(storage.__suggest()); expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ u: MINE, n: 'My Radio', count: 2, status: 'VALID', canon: 'mine.example.ro/live' }); expect(rows[0].v).toMatchObject({ ok: true, codec: 'MP3', bitrate: 128 });
   });
-  test('refused: http, user:password@, private address, no device id, a junk body; and the 6th suggestion of one device within an hour', async () => {
+  test('refused: user:password@, private / local addresses (answered, nothing stored), no device id / junk body (400); the 9th submission of one device within an hour is stopped', async () => {
     await stored();
-    for (const bad of [{ u: 'http://mine.example.ro/x' }, { u: 'https://u:p@mine.example.ro/x' }, { u: 'https://127.0.0.1/x' }, { u: 'https://10.0.0.5/x' }, { dev: 'x' }, { u: '' }]) expect((await suggest(bad)).statusCode).toBe(400);
-    for (let i = 0; i < 5; i++) expect((await suggest({ u: 'https://m' + i + '.example.ro/s', dev: 'suggestdevice0009' })).statusCode).toBe(200);
-    expect((await suggest({ u: 'https://m6.example.ro/s', dev: 'suggestdevice0009' })).statusCode).toBe(429); expect(Object.keys(storage.__suggest())).toHaveLength(5);
+    for (const bad of [{ u: 'https://u:p@mine.example.ro/x' }, { u: 'https://127.0.0.1/x' }, { u: 'https://10.0.0.5/x' }, { u: 'http://localhost/x' }, { u: 'ftp://mine.example.ro/x' }]) { const r = await suggest(bad); expect(r.statusCode).toBe(200); expect(JSON.parse(r.body)).toMatchObject({ ok: false, status: 'INVALID' }); }
+    for (const bad of [{ dev: 'x' }, { u: '' }]) expect((await suggest(bad)).statusCode).toBe(400);
+    expect(Object.keys(storage.__suggest())).toHaveLength(0);
+    for (let i = 0; i < 8; i++) expect((await suggest({ u: 'https://m' + i + '.example.ro/s', dev: 'suggestdevice0009' })).statusCode).toBe(200);
+    expect((await suggest({ u: 'https://m9.example.ro/s', dev: 'suggestdevice0009' })).statusCode).toBe(429); expect(Object.keys(storage.__suggest())).toHaveLength(8);
   });
   test('a station that is in the list already is not stored again; the daily cap (200) stops a flood; the name is cleaned', async () => {
-    await stored(); expect(JSON.parse((await suggest({ u: URL_A })).body).known).toBe(true); expect(Object.keys(storage.__suggest())).toHaveLength(0);
+    await stored(); expect(JSON.parse((await suggest({ u: URL_A })).body)).toMatchObject({ ok: true, dup: 'public', queued: false, url: URL_A }); expect(Object.keys(storage.__suggest())).toHaveLength(0);
     await suggest({ n: '<b>Bold</b>\u0007 Name   here' }); expect(Object.values(storage.__suggest())[0].n).toBe('b Bold /b Name here');
     for (let i = 0; i < 199; i++) await storage.bumpSuggestDay(new Date().toISOString().slice(0, 10), 200);
-    expect((await suggest({ u: 'https://flood.example.ro/s', dev: 'suggestdevice0007' })).statusCode).toBe(429);
+    expect(JSON.parse((await suggest({ u: 'https://flood.example.ro/s', dev: 'suggestdevice0007' })).body)).toMatchObject({ ok: true, queued: false, note: 'day-limit' });   // he can still play it, it just does not reach the owner today
   });
   test('GET ?resolve= answers with the resolver (stubbed here), no-store, and is limited to 12 per hour per visitor', async () => {
     await stored(); radio.__setResolver(async input => ({ ok: true, url: input, name: 'X', codec: 'MP3' }));
@@ -409,19 +414,19 @@ describe('stations of the players: suggest (📨), resolve, approve into any of 
       storage.__cache({ updatedAt: Date.now(), v: radio.BUILDER_VERSION, cats: [{ id: 'manele', emoji: 'F', label: 'MANELE', items: [item('Alpha', URL_A)] }, { id: 'etno', emoji: 'E', label: 'ETNO', items: [] }, { id: 'pop', emoji: 'P', label: 'POP', items: [item('Gamma', URL_C)] }, { id: 'global', emoji: 'G', label: 'GLOBAL', items: [] }] });
       const { handler } = require('./functions/lxa-account.js'); let ip = 0;
       call = async data => { const r = await handler({ httpMethod: 'POST', headers: { 'x-vercel-forwarded-for': '10.6.0.' + (ip++ & 255) }, body: JSON.stringify({ action: 'admin-radio', id: 1, safeWord: 'pw', ...data }) }); return { status: r.statusCode, body: JSON.parse(r.body) }; };
-      await radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ action: 'suggest', u: MINE, n: 'My Radio', dev: 'suggestdevice0001' }) });
-      await radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ action: 'suggest', u: MINE, n: 'My Radio', dev: 'suggestdevice0002' }) });
-      key = health.radioKey(MINE);
+      radio.__setValidator(async input => verdictOK(input, { codec: 'AAC', bitrate: 64 }));
+      await radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ action: 'submit', u: MINE, n: 'My Radio', dev: 'suggestdevice0001' }) });
+      await radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ action: 'submit', u: MINE, n: 'My Radio', dev: 'suggestdevice0002' }) });
+      key = health.radioKey('mine.example.ro/live');   // a submission is keyed by the CANONICAL address (not by the string the player typed)
     };
-    const withResolver = async (fn, body) => { const custom = require('./functions/radio-custom.js'); const real = custom.resolveStation; custom.resolveStation = fn; try { return await body(); } finally { custom.resolveStation = real; } };
     test('list: one row per link with the number of players, the 12 targets', async () => {
       await setup(); const r = (await call({ op: 'suggestions' })).body;
-      expect(r.suggestions).toHaveLength(1); expect(r.suggestions[0]).toMatchObject({ key, host: 'mine.example.ro', path: '/live', count: 2, n: 'My Radio', query: false }); expect(r.targets).toHaveLength(12); expect(r.targets).toEqual(expect.arrayContaining(['top', 'global', 'manele', 'retro']));
+      expect(r.suggestions).toHaveLength(1); expect(r.suggestions[0]).toMatchObject({ key, host: 'mine.example.ro', path: '/live', count: 2, n: 'My Radio', query: false, status: 'VALID', dup: 'new', orig: MINE }); expect(r.suggestions[0].v).toMatchObject({ ok: true, codec: 'AAC' }); expect(r.approved).toEqual([]); expect(r.rejected).toEqual([]); expect(r.targets).toHaveLength(12); expect(r.targets).toEqual(expect.arrayContaining(['top', 'global', 'manele', 'retro']));
     });
     test('approve into ANY of the 12 categories (also GLOBAL and TOP): the station is public at the top of it, one row less in the list, the suggestion is gone', async () => {
       for (const cat of ['etno', 'global', 'top', 'manele']) {
         await setup();
-        const r = await withResolver(async () => ({ ok: true, url: MINE, name: 'My Radio', codec: 'AAC', bitrate: 64 }), () => call({ op: 'sug-approve', key, cat, name: 'My Radio PUBLIC' }));
+        const r = await call({ op: 'sug-approve', key, cat, name: 'My Radio PUBLIC' });
         expect(r.body.ok).toBe(true); expect(Object.keys(storage.__suggest())).toHaveLength(0); expect(Object.values(storage.__customs())[0]).toMatchObject({ u: MINE, n: 'My Radio PUBLIC', cat, c: 'AAC', b: 64 });
         radio.__resetHidden(); const served = (await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body, cats = JSON.parse(served).cats;
         expect(cats.find(c => c.id === cat).items[0]).toMatchObject({ n: 'My Radio PUBLIC', u: MINE }); expect(cats.filter(c => c.items.some(i => i.u === MINE))).toHaveLength(1);
@@ -431,24 +436,28 @@ describe('stations of the players: suggest (📨), resolve, approve into any of 
       await setup();
       expect((await call({ op: 'sug-approve', key, cat: 'nope', name: 'Okay' })).status).toBe(400); expect((await call({ op: 'sug-approve', key, cat: 'pop', name: 'x' })).status).toBe(400);
       expect((await call({ op: 'sug-approve', key: '0123456789abcdef', cat: 'pop', name: 'Okay' })).status).toBe(404);
-      const bad = await withResolver(async () => ({ ok: false, why: 'unreachable' }), () => call({ op: 'sug-approve', key, cat: 'pop', name: 'Okay' })); expect(bad.status).toBe(409);
-      const forced = await withResolver(async () => ({ ok: false, why: 'unreachable' }), () => call({ op: 'sug-approve', key, cat: 'pop', name: 'Okay', force: true })); expect(forced.body.ok).toBe(true);
+      storage.__suggest()[key].v = { ok: false, why: 'unreachable' };   // the stored verdict is not a pass: the server checks again before it publishes
+      const bad = await withValidate(async () => ({ ok: false, why: 'unreachable' }), () => call({ op: 'sug-approve', key, cat: 'pop', name: 'Okay' })); expect(bad.status).toBe(409);
+      const forced = await withValidate(async () => ({ ok: false, why: 'unreachable' }), () => call({ op: 'sug-approve', key, cat: 'pop', name: 'Okay', force: true })); expect(forced.body.ok).toBe(true);
     });
-    test('reject: the suggestion goes and the same link is accepted silently but never listed again; test returns the resolver answer; only the admin gets in', async () => {
+    test('reject: the suggestion goes and the same link is accepted silently but never listed again; TEST AGAIN stores the new verdict on the submission', async () => {
       await setup(); expect((await call({ op: 'suggestions' }, undefined)).status).toBe(200);
-      const t = await withResolver(async () => ({ ok: true, url: MINE, codec: 'MP3' }), () => call({ op: 'sug-test', key })); expect(t.body.resolved).toMatchObject({ ok: true, codec: 'MP3' });
-      expect((await call({ op: 'sug-reject', key })).body.ok).toBe(true); expect(Object.keys(storage.__suggest())).toHaveLength(0); expect(storage.__rejected()[key]).toBe(1);
-      expect((await radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ action: 'suggest', u: MINE, n: 'Again', dev: 'suggestdevice0003' }) })).statusCode).toBe(200); expect(Object.keys(storage.__suggest())).toHaveLength(0);
+      const t = await withValidate(async () => verdictOK(MINE, { codec: 'MP3', bitrate: 96 }), () => call({ op: 'sug-test', key })); expect(t.body).toMatchObject({ ok: true, status: 'VALID' }); expect(t.body.v).toMatchObject({ codec: 'MP3', bitrate: 96 }); expect(storage.__suggest()[key].v.bitrate).toBe(96);
+      const down = await withValidate(async () => ({ ok: false, why: 'disconnects' }), () => call({ op: 'sug-test', key })); expect(down.body).toMatchObject({ status: 'INVALID' }); expect(storage.__suggest()[key]).toMatchObject({ status: 'INVALID' });
+      expect((await call({ op: 'sug-reject', key })).body.ok).toBe(true); expect(Object.keys(storage.__suggest())).toHaveLength(0); expect(storage.__rejected()[key]).toMatchObject({ u: MINE, orig: MINE });
+      radio.__setValidator(async input => verdictOK(input));
+      const again = await radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ action: 'submit', u: MINE, n: 'Again', dev: 'suggestdevice0003' }) }); expect(JSON.parse(again.body)).toMatchObject({ ok: true, queued: false, dup: 'rejected' }); expect(Object.keys(storage.__suggest())).toHaveLength(0);
+      expect((await call({ op: 'suggestions' })).body.rejected[0]).toMatchObject({ key, u: MINE });
     });
     test('an approved station can be moved, hidden, starred and reported like any other; the station manager lists it flagged; remove deletes it', async () => {
-      await setup(); await withResolver(async () => ({ ok: true, url: MINE, name: 'Mine', codec: 'MP3' }), () => call({ op: 'sug-approve', key, cat: 'pop', name: 'Mine Public' }));
-      const stations = (await call({ op: 'stations' })).body.stations, row = stations.find(s => s.key === key); expect(row).toMatchObject({ n: 'Mine Public', custom: true, cats: ['pop'] });
-      expect((await call({ op: 'move', key, cat: 'etno' })).body.ok).toBe(true);
-      expect((await call({ op: 'hide', key })).body.ok).toBe(true);
+      await setup(); await call({ op: 'sug-approve', key, cat: 'pop', name: 'Mine Public' });
+      const stationKey = health.radioKey(MINE), stations = (await call({ op: 'stations' })).body.stations, row = stations.find(s => s.key === stationKey); expect(row).toMatchObject({ n: 'Mine Public', custom: true, cats: ['pop'] });
+      expect((await call({ op: 'move', key: stationKey, cat: 'etno' })).body.ok).toBe(true);
+      expect((await call({ op: 'hide', key: stationKey })).body.ok).toBe(true);
       const post = body => radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify(body) }); radio.__resetHidden();
       expect((await post({ action: 'fav', u: MINE, on: true, dev: 'favdevice00000001' })).statusCode).toBe(200); expect((await post({ action: 'report', u: MINE, kind: 'manual', code: 'playing', dev: 'favdevice00000001' })).statusCode).toBe(200);
       radio.__resetHidden(); expect(JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body).cats.some(c => c.items.some(i => i.u === MINE))).toBe(false);   // hidden
-      expect((await call({ op: 'custom-remove', key })).body.ok).toBe(true); expect(Object.keys(storage.__customs())).toHaveLength(0);
+      expect((await call({ op: 'custom-remove', key: stationKey })).body.ok).toBe(true); expect(Object.keys(storage.__customs())).toHaveLength(0);
     });
   });
   test('served list: customs go to the top of their category, replace a station with the same address, honour hide, and TOP takes customs first', () => {
@@ -457,5 +466,137 @@ describe('stations of the players: suggest (📨), resolve, approve into any of 
     const out = radio.servedList(data, state), by = id => out.cats.find(c => c.id === id).items.map(i => i.n);
     expect(by('manele')).toEqual(['Mine', 'Alpha']); expect(by('pop')).toEqual(['Gamma']); expect(by('top')).toEqual(['Toppy', 'Alpha']);
     const hid = radio.servedList(data, { ...state, hidden: new Set([health.radioKey(MINE)]) }); expect(hid.cats.find(c => c.id === 'manele').items.map(i => i.n)).toEqual(['Alpha']);
+  });
+});
+describe('player submission → admin → public: the server validates, saves automatically, decides duplicates, never trusts the player', () => {
+  const MINE = 'https://mine.example.ro/live', DEV1 = 'submitdevice00001', DEV2 = 'submitdevice00002';
+  const verdictOK = (u, over = {}) => ({ ok: true, url: u, name: '', codec: 'MP3', bitrate: 128, sampleRate: 44100, channels: 2, stable: true, stalls: 0, warnings: [], audio: true, hls: false, level: null, measuredKbps: 127, checkedAt: Date.now(), ...over });
+  const submit = (body, headers = {}) => radio.handler({ httpMethod: 'POST', headers, body: JSON.stringify({ action: 'submit', u: MINE, n: 'My Radio', dev: DEV1, ...body }) });
+  const json = r => JSON.parse(r.body);
+  beforeEach(async () => { await stored(); radio.__setValidator(async input => verdictOK(input)); radio.__setAccountVerifier(async (id, token) => (token === 'good-token' && Number(id) === 7 ? { id: 7, name: 'Ana' } : null)); });
+
+  test('valid stream: the player gets everything he needs to PLAY now, the submission is saved by itself as VALID/queued, nothing is public', async () => {
+    const r = json(await submit({}));
+    expect(r).toMatchObject({ ok: true, status: 'VALID', url: MINE, codec: 'MP3', bitrate: 128, sampleRate: 44100, channels: 2, stable: true, queued: true, dup: 'new' });
+    const row = Object.values(storage.__suggest())[0]; expect(row).toMatchObject({ status: 'VALID', u: MINE, orig: MINE, count: 1 }); expect(Object.keys(storage.__customs())).toHaveLength(0);
+    expect(JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body).cats.some(c => c.items.some(i => i.u === MINE))).toBe(false);   // not public
+  });
+  test('the player never sees the owner\'s data (account, original / canonical address, devices, raw verdict)', async () => {
+    const r = json(await submit({ id: 7, token: 'good-token' }));
+    for (const hidden of ['by', 'accounts', 'canon', 'orig', 'devices', 'v', 'first', 'last', 'count', 'checkedAt']) expect(r).not.toHaveProperty(hidden);
+  });
+  test('who sent it: recorded ONLY with a valid session token; a wrong token, a wrong id or none = anonymous', async () => {
+    await submit({ id: 7, token: 'good-token' }); expect(Object.values(storage.__suggest())[0].by).toEqual({ id: 7, name: 'Ana' });
+    storage.__reset(); await stored(); await submit({ id: 7, token: 'stolen' }); await submit({ id: 8, token: 'good-token', dev: DEV2 });
+    const row = Object.values(storage.__suggest())[0]; expect(row.by).toBeUndefined(); expect(row.accounts).toEqual([]); expect(row.count).toBe(2);
+  });
+  test('the player cannot write status, verdict, approval or ownership: those fields in the body are ignored', async () => {
+    radio.__setValidator(async () => ({ ok: false, why: 'not-audio' }));
+    const r = json(await submit({ status: 'APPROVED', approved: true, public: true, v: { ok: true, codec: 'FLAC' }, by: { id: 1, name: 'Boss' }, cat: 'top', health: { status: 'OK' }, level: 99, validation: 'ok' }));
+    expect(r).toMatchObject({ ok: false, status: 'INVALID', why: 'not-audio' });
+    const row = Object.values(storage.__suggest())[0]; expect(row).toMatchObject({ status: 'INVALID', v: { ok: false, why: 'not-audio' } }); expect(row.by).toBeUndefined(); expect(row.cat).toBeUndefined(); expect(row.health).toBeUndefined(); expect(Object.keys(storage.__customs())).toHaveLength(0);
+  });
+  test('an INVALID link is kept for the owner with the exact reason (and the player is told the real reason)', async () => {
+    for (const why of ['html', 'not-audio', 'disconnects', 'unstable', 'unreachable', 'http-only', 'blocked', 'no-data']) {
+      storage.__reset(); await stored(); radio.__setValidator(async () => ({ ok: false, why })); radio.__resetHidden();
+      expect(json(await submit({}))).toMatchObject({ ok: false, status: 'INVALID', why, queued: true }); expect(Object.values(storage.__suggest())[0]).toMatchObject({ status: 'INVALID', v: { why } });
+    }
+  });
+  test('duplicates are decided on the canonical address, and ONE row results when two players send it at the same moment', async () => {
+    const variants = ['HTTP://mine.example.ro/live', 'http://mine.example.ro/live/', 'https://www.mine.example.ro:443/live', 'https://mine.example.ro/live?utm_source=a'];
+    const out = await Promise.all(variants.map((u, i) => submit({ u, dev: 'racedevice0000' + (i + 1) }).then(json)));
+    expect(Object.keys(storage.__suggest())).toHaveLength(1); const row = Object.values(storage.__suggest())[0]; expect(row.count).toBe(4);
+    expect(out.filter(r => r.dup === 'new')).toHaveLength(1); expect(out.filter(r => r.dup === 'pending')).toHaveLength(3); expect(out.every(r => r.ok && r.queued)).toBe(true);
+  });
+  test('a duplicate of a row that is waiting is NOT validated again and can never turn a good row into a bad one (the other spelling may not even work on the real server)', async () => {
+    let calls = 0; radio.__setValidator(async input => { calls++; return verdictOK(input); });
+    expect(json(await submit({}))).toMatchObject({ ok: true, dup: 'new' }); expect(calls).toBe(1);
+    radio.__setValidator(async () => { calls++; return { ok: false, why: 'unreachable' }; });
+    const again = json(await submit({ u: 'HTTP://MINE.example.ro/live/', dev: DEV2 }));
+    expect(again).toMatchObject({ ok: true, status: 'VALID', dup: 'pending', queued: true, url: MINE, codec: 'MP3', bitrate: 128 }); expect(calls).toBe(1);   // the first answer is reused
+    const row = Object.values(storage.__suggest())[0]; expect(row).toMatchObject({ status: 'VALID', count: 2 }); expect(row.v).toMatchObject({ ok: true, codec: 'MP3' });
+  });
+  test('an INVALID row is checked again when somebody sends it later: if it plays now it becomes VALID; if the stored check is old a failing result still cannot downgrade a VALID row', async () => {
+    radio.__setValidator(async () => ({ ok: false, why: 'unreachable' })); await submit({});
+    expect(Object.values(storage.__suggest())[0].status).toBe('INVALID');
+    radio.__setValidator(async input => verdictOK(input)); expect(json(await submit({ dev: DEV2 }))).toMatchObject({ ok: true, status: 'VALID', dup: 'pending' });
+    const row = Object.values(storage.__suggest())[0]; expect(row).toMatchObject({ status: 'VALID', count: 2 });
+    row.checkedAt = Date.now() - 7 * 3600 * 1000;   // the stored check is older than 6 hours: it is checked again, but a bad answer only adds the player
+    radio.__setValidator(async () => ({ ok: false, why: 'disconnects' })); await submit({ dev: 'submitdevice00003' });
+    expect(Object.values(storage.__suggest())[0]).toMatchObject({ status: 'VALID', count: 3 });
+  });
+  test('already in the public list / already approved / already rejected: the player can listen, nothing is queued again', async () => {
+    expect(json(await submit({ u: 'HTTP://A.example.ro/live/' }))).toMatchObject({ ok: true, dup: 'public', queued: false, url: URL_A });
+    storage.__customs()[health.radioKey(MINE)] = { u: MINE, n: 'Approved', c: 'MP3', b: 96, cat: 'pop', at: 1 }; radio.__resetHidden();
+    expect(json(await submit({ u: 'https://www.mine.example.ro/live/' }))).toMatchObject({ ok: true, dup: 'approved', queued: false, name: 'Approved' });
+    storage.__reset(); await stored(); radio.__resetHidden(); storage.__rejected()[health.radioKey('mine.example.ro/live')] = { at: 1 };
+    expect(json(await submit({}))).toMatchObject({ ok: true, dup: 'rejected', queued: false }); expect(Object.keys(storage.__suggest())).toHaveLength(0);
+  });
+  test('a page or playlist that leads to a stream already in the list is a duplicate too (checked on the stream it resolves to)', async () => {
+    radio.__setValidator(async () => verdictOK(URL_A)); expect(json(await submit({ u: 'https://page.example.ro/radio.pls' }))).toMatchObject({ ok: true, dup: 'public', queued: false }); expect(Object.keys(storage.__suggest())).toHaveLength(0);
+  });
+  test('SSRF at the door: private, local and credential addresses never reach the validator; the validator is not even called', async () => {
+    let called = 0; radio.__setValidator(async () => { called++; return verdictOK(MINE); });
+    for (const u of ['http://127.0.0.1/x', 'https://169.254.169.254/latest', 'http://[::1]/x', 'https://192.168.0.5/s', 'http://localhost:8080/x', 'https://u:p@mine.example.ro/x', 'file:///etc/passwd', 'ftp://mine.example.ro/x']) expect(json(await submit({ u }))).toMatchObject({ ok: false, status: 'INVALID' });
+    expect(called).toBe(0); expect(Object.keys(storage.__suggest())).toHaveLength(0);
+  });
+  test('limits: 8 submissions per device per hour and 15 validations per visitor per hour (the expensive part) → 429', async () => {
+    for (let i = 0; i < 15; i++) expect((await submit({ u: 'https://l' + i + '.example.ro/s', dev: 'limitdevice' + String(100000 + i) }, { 'x-forwarded-for': '9.9.9.9' })).statusCode).toBe(200);
+    expect((await submit({ u: 'https://l99.example.ro/s', dev: 'limitdevice999999' }, { 'x-forwarded-for': '9.9.9.9' })).statusCode).toBe(429);
+    expect((await submit({ u: 'https://l98.example.ro/s', dev: 'limitdevice999998' }, { 'x-forwarded-for': '8.8.8.8' })).statusCode).toBe(200);
+  });
+  test('the old "suggest" action goes through the SAME validated pipeline (no second system)', async () => {
+    radio.__setValidator(async () => ({ ok: false, why: 'html' }));
+    expect(json(await radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ action: 'suggest', u: MINE, n: 'Old client', dev: DEV1 }) }))).toMatchObject({ ok: false, why: 'html' }); expect(Object.values(storage.__suggest())[0].status).toBe('INVALID');
+  });
+
+  describe('admin: one place for everything, and the stored status can only be changed by the admin', () => {
+    let call; const key = health.radioKey('mine.example.ro/live');
+    beforeEach(() => {
+      storage.__put('1 : Boss', { id: 1, name: 'Boss', safeWord: 'pw', role: 'admin', balance: 100, difficulty: 2, createdAt: 1 }); storage.__put('2 : Ana', { id: 2, name: 'Ana', safeWord: 'pw', balance: 100, difficulty: 2, createdAt: 1 });
+      const { handler } = require('./functions/lxa-account.js'); let ip = 0;
+      call = async (data, id = 1) => { const r = await handler({ httpMethod: 'POST', headers: { 'x-vercel-forwarded-for': '10.7.0.' + (ip++ & 255) }, body: JSON.stringify({ action: 'admin-radio', id, safeWord: 'pw', ...data }) }); return { status: r.statusCode, body: JSON.parse(r.body) }; };
+    });
+    test('the owner sees who, the ORIGINAL and the NORMALIZED address, when, the validator result with the measured numbers, duplicate status and a status per row', async () => {
+      await submit({ u: 'HTTP://Mine.example.ro/live/?utm_source=z', id: 7, token: 'good-token' }); radio.__setValidator(async () => ({ ok: false, why: 'html' })); await submit({ u: 'https://bad.example.ro/page', dev: DEV2 });
+      const rows = (await call({ op: 'suggestions' })).body.suggestions;
+      expect(rows.map(r => r.status)).toEqual(['VALID', 'INVALID']);
+      expect(rows[0]).toMatchObject({ key, orig: 'HTTP://Mine.example.ro/live/?utm_source=z', u: 'http://mine.example.ro/live/?utm_source=z', canon: 'mine.example.ro/live', dup: 'new', by: { id: 7, name: 'Ana' }, count: 1 });
+      expect(rows[0].first).toBeGreaterThan(0); expect(rows[0].checkedAt).toBeGreaterThan(0); expect(rows[0].v).toMatchObject({ ok: true, codec: 'MP3', bitrate: 128, sampleRate: 44100, channels: 2, stable: true, stalls: 0, measuredKbps: 127 }); expect(rows[0].v.level).toBeUndefined();   // the audio level is not measured: the row has no level at all (the panel says so)
+      expect(rows[1].v).toMatchObject({ ok: false, why: 'html' });
+    });
+    test('TEST AGAIN updates the verdict on the row; APPROVE publishes it (with who/original/health); REJECT keeps a record and it never reaches the public list', async () => {
+      await submit({}); const validate = require('./functions/radio-validate.js'), real = validate.validateStream;
+      try {
+        validate.validateStream = async () => ({ ok: false, why: 'disconnects' }); expect((await call({ op: 'sug-test', key })).body).toMatchObject({ status: 'INVALID' }); expect(storage.__suggest()[key].v.why).toBe('disconnects');
+        validate.validateStream = async u => verdictOK(u, { bitrate: 64, codec: 'AAC', warnings: ['stalls'], stable: false }); expect((await call({ op: 'sug-test', key })).body).toMatchObject({ status: 'VALID' });
+        expect((await call({ op: 'sug-approve', key, cat: 'pop', name: 'Mine OK' })).body.ok).toBe(true);
+      } finally { validate.validateStream = real; }
+      expect(Object.values(storage.__customs())[0]).toMatchObject({ u: MINE, n: 'Mine OK', cat: 'pop', c: 'AAC', b: 64, orig: MINE, health: { status: 'DEGRADED' } }); expect(Object.keys(storage.__suggest())).toHaveLength(0);   // the codec / bitrate of the LAST test (TEST AGAIN) are the ones published
+      radio.__resetHidden(); expect(JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body).cats.find(c => c.id === 'pop').items[0]).toMatchObject({ n: 'Mine OK', u: MINE });
+      const list = (await call({ op: 'suggestions' })).body; expect(list.approved[0]).toMatchObject({ n: 'Mine OK', health: { status: 'DEGRADED' }, orig: MINE });
+    });
+    test('only the admin gets in: a player account cannot read submissions, test, approve, reject or check', async () => {
+      await submit({}); for (const op of ['suggestions', 'sug-test', 'sug-approve', 'sug-reject', 'custom-check', 'customs-check', 'custom-remove']) expect((await call({ op, key, cat: 'pop', name: 'Okay' }, 2)).status).toBe(403);
+      expect(Object.keys(storage.__suggest())).toHaveLength(1);
+    });
+    test('health of APPROVED stations: OK / DEGRADED / OFFLINE are written, nothing is deleted or hidden, a removed station is not brought back', async () => {
+      const A = 'https://ok.example.ro/s', B = 'https://flaky.example.ro/s', C = 'https://dead.example.ro/s';
+      for (const [u, n] of [[A, 'Ok'], [B, 'Flaky'], [C, 'Dead']]) storage.__customs()[health.radioKey(u)] = { u, n, c: 'MP3', b: 128, cat: 'pop', at: 1 };
+      radio.__setValidator(async u => (u === A ? verdictOK(u) : u === B ? verdictOK(u, { warnings: ['slow'], stable: false, measuredKbps: 60 }) : { ok: false, why: 'unreachable' }));
+      const out = (await call({ op: 'customs-check' })).body.results; expect(out.map(r => r.status).sort()).toEqual(['DEGRADED', 'OFFLINE', 'OK']);
+      const c = storage.__customs(); expect(c[health.radioKey(A)].health).toMatchObject({ status: 'OK' }); expect(c[health.radioKey(B)].health).toMatchObject({ status: 'DEGRADED', kbps: 60 }); expect(c[health.radioKey(C)].health).toMatchObject({ status: 'OFFLINE', why: 'unreachable' });
+      expect(Object.keys(c)).toHaveLength(3); radio.__resetHidden();
+      expect(JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body).cats.find(cat => cat.id === 'pop').items.some(i => i.u === C)).toBe(true);   // OFFLINE is not hidden or deleted automatically
+      await storage.patchRadioCustomHealth('0123456789abcdef', { status: 'OK' }); expect(c['0123456789abcdef']).toBeUndefined();
+      expect((await call({ op: 'custom-check', key: health.radioKey(C) })).body.results).toHaveLength(1);
+      const listed = (await call({ op: 'suggestions' })).body.approved; expect(listed.find(a => a.u === C).health.status).toBe('OFFLINE');
+    });
+    test('the daily cron (?refresh=1) also runs the health sweep, oldest check first, a bounded batch', async () => {
+      const urls = Array.from({ length: 12 }, (_, i) => 'https://s' + i + '.example.ro/s');
+      urls.forEach((u, i) => { storage.__customs()[health.radioKey(u)] = { u, n: 'S' + i, c: 'MP3', b: 128, cat: 'pop', at: 1, health: i < 4 ? { status: 'OK', at: 5000 + i } : undefined }; });
+      const seen = []; radio.__setValidator(async u => { seen.push(u); return verdictOK(u); });
+      await radio.healthSweep(storage, { max: 8 }); expect(seen).toHaveLength(8); expect(seen.some(u => /s[0-3]\./.test(u))).toBe(false);   // the 4 stations checked most recently wait for the next run
+    });
   });
 });

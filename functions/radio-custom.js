@@ -53,13 +53,13 @@ async function safeFetch(rawUrl, { headers = {}, maxBytes = PAGE_BYTES, timeoutM
       if (!(await assertPublic(new URL(url).hostname, lookup))) return { error: 'blocked' };
       const response = await fetchFn(url, { signal: controller.signal, redirect: 'manual', headers: { 'user-agent': AGENT, ...headers } });
       if (response.status >= 300 && response.status < 400 && response.headers.get('location')) {
-        try { response.body && response.body.cancel(); } catch (error) { /* ignore */ }
+        try { response.body && Promise.resolve(response.body.cancel()).catch(() => {}); } catch (error) { /* ignore */ }
         url = cleanStreamUrl(new URL(response.headers.get('location'), url).href); if (!url) return { error: 'bad-redirect' }; continue;
       }
       const type = String(response.headers.get('content-type') || '').toLowerCase(), head = name => response.headers.get(name);
-      if (!response.ok) { try { response.body && response.body.cancel(); } catch (error) { /* ignore */ } return { error: 'http ' + response.status, status: response.status, url }; }
+      if (!response.ok) { try { response.body && Promise.resolve(response.body.cancel()).catch(() => {}); } catch (error) { /* ignore */ } return { error: 'http ' + response.status, status: response.status, url }; }
       const chunks = []; let total = 0;
-      if (response.body) { const reader = response.body.getReader(); while (total < maxBytes) { const { value, done } = await reader.read(); if (done) break; chunks.push(Buffer.from(value)); total += value.length; } try { reader.cancel(); } catch (error) { /* ignore */ } }
+      if (response.body) { const reader = response.body.getReader(); while (total < maxBytes) { const { value, done } = await reader.read(); if (done) break; chunks.push(Buffer.from(value)); total += value.length; } try { Promise.resolve(reader.cancel()).catch(() => {}); } catch (error) { /* ignore */ } }
       return { status: response.status, url, type, bytes: Buffer.concat(chunks).subarray(0, maxBytes), icyName: head('icy-name') || '', icyBr: head('icy-br') || '', ms: Date.now() - started };
     }
     return { error: 'too-many-redirects' };

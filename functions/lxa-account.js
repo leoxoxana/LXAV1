@@ -568,28 +568,41 @@ const accountHandler = async event => {
         const stations = cache && Array.isArray(cache.cats) ? new Set(cache.cats.flatMap(cat => cat.items.map(item => item.u))).size : 0;
         const radio = require('./radio'), labels = new Map(((cache && cache.cats) || []).map(cat => [cat.id, cat])), categories = radio.MOVE_TARGETS.filter(id => labels.has(id)).map(id => ({ id, emoji: labels.get(id).emoji, label: labels.get(id).label }));
         const summary = health.summarize(reports, hidden); summary.reports.forEach(row => { row.moved = (moves[row.key] && moves[row.key].cat) || ''; });
-        return json({ ...summary, categories, stations, suggestCount: Object.keys(suggested || {}).length, outdated: !cache || cache.v !== radio.BUILDER_VERSION, updatedAt: number(cache && cache.updatedAt), checkedAt: number(cache && (cache.checkedAt || cache.updatedAt)), dropped: cache && Array.isArray(cache.dropped) ? cache.dropped.slice(0, 40).map(d => ({ n: String(d.n || ''), u: String(d.u || ''), at: number(d.at), key: health.radioKey(d.u) })) : [] });
+        return json({ ...summary, categories, stations, suggestCount: Object.values(suggested || {}).filter(v => v && v.u && v.status !== 'INVALID').length, outdated: !cache || cache.v !== radio.BUILDER_VERSION, updatedAt: number(cache && cache.updatedAt), checkedAt: number(cache && (cache.checkedAt || cache.updatedAt)), dropped: cache && Array.isArray(cache.dropped) ? cache.dropped.slice(0, 40).map(d => ({ n: String(d.n || ''), u: String(d.u || ''), at: number(d.at), key: health.radioKey(d.u) })) : [] });
       }
-      // STATIONS OF THE PLAYERS: the links they offered with the 📨 button (one row per link), test, approve into ANY of the 12 categories (it becomes a public station, at the top of that category),
-      // reject (the link never shows up again), remove an approved station
+      // STATIONS OF THE PLAYERS: every link a player added is saved by the server (radio.js handleSubmit) with the verdict of the SERVER's own stream check. Here the owner sees them all
+      // (VALID / INVALID waiting, APPROVED with their health, REJECTED), tests again, listens, approves into ANY of the 12 categories (public, at the top of that category) or rejects (never shows up again).
       if (op === 'suggestions') {
-        const [suggest, customs] = await Promise.all([store.getRadioSuggest(), store.getRadioCustoms()]), radio = require('./radio');
-        const rows = Object.entries(suggest).filter(([, v]) => v && v.u).map(([k, v]) => { let host = '', path = ''; try { const u = new URL(v.u); host = u.host; path = u.pathname; } catch (error) { /* keep empty */ } return { key: k, u: String(v.u), host, path, query: Boolean(v.u.includes('?')), n: String(v.n || ''), count: Number(v.count) || 0, first: Number(v.first) || 0, last: Number(v.last) || 0 }; }).sort((a, b) => b.count - a.count || b.last - a.last).slice(0, 100);
-        const approved = Object.entries(customs).filter(([, v]) => v && v.u).map(([k, v]) => ({ key: k, n: String(v.n || ''), u: String(v.u), cat: v.cat, at: Number(v.at) || 0 })).sort((a, b) => b.at - a.at);
-        return json({ suggestions: rows, approved, targets: radio.CUSTOM_TARGETS });
+        const radio = require('./radio'), validate = require('./radio-validate');
+        const [suggest, customs, rejected, known] = await Promise.all([store.getRadioSuggest(), store.getRadioCustoms(), store.getRadioRejected(), radio.knownIndex(store).catch(() => new Map())]);
+        const order = { VALID: 0, PENDING: 1, INVALID: 2 };
+        const rows = Object.entries(suggest).filter(([, v]) => v && v.u).map(([k, v]) => { let host = '', path = ''; try { const u = new URL(v.u); host = u.host; path = u.pathname; } catch (error) { /* keep empty */ } const canon = v.canon || validate.canonicalStream(v.u), inList = known.get(canon);
+          return { key: k, status: v.status === 'VALID' || v.status === 'INVALID' ? v.status : 'PENDING', u: String(v.u), orig: String(v.orig || v.u), canon, host, path, query: String(v.u).includes('?'), n: String(v.n || ''), count: number(v.count), first: number(v.first), last: number(v.last), checkedAt: number(v.checkedAt), by: v.by || null, accounts: Array.isArray(v.accounts) ? v.accounts : [], v: v.v || null, dup: inList ? inList.where : 'new' }; })
+          .sort((a, b) => order[a.status] - order[b.status] || b.last - a.last);
+        const approved = Object.entries(customs).filter(([, v]) => v && v.u).map(([k, v]) => ({ key: k, n: String(v.n || ''), u: String(v.u), cat: v.cat, at: number(v.at), codec: String(v.c || ''), bitrate: number(v.b), sampleRate: number(v.sr), channels: number(v.ch), orig: String(v.orig || ''), by: v.by || null, health: v.health || null })).sort((a, b) => b.at - a.at);
+        const gone = Object.entries(rejected).filter(([, v]) => v).map(([k, v]) => (typeof v === 'object' ? { key: k, at: number(v.at), u: String(v.u || ''), orig: String(v.orig || ''), n: String(v.n || ''), by: v.by || null } : { key: k, at: number(v), u: '', orig: '', n: '', by: null })).sort((a, b) => b.at - a.at).slice(0, 60);
+        return json({ suggestions: rows, approved, rejected: gone, targets: radio.CUSTOM_TARGETS });
       }
-      if (op === 'sug-test' || op === 'sug-approve' || op === 'sug-reject' || op === 'custom-remove') {
+      if (op === 'customs-check') { const results = await require('./radio').healthSweep(store, { max: 8, budgetMs: 25000, durationMs: 4000 }); return json({ ok: true, results }); }
+      if (op === 'sug-test' || op === 'sug-approve' || op === 'sug-reject' || op === 'custom-remove' || op === 'custom-check') {
         if (!/^[0-9a-f]{16}$/.test(key)) return json({ error: 'Bad station key.' }, 400);
-        const radio = require('./radio');
+        const radio = require('./radio'), validate = require('./radio-validate');
         if (op === 'custom-remove') { await store.setRadioCustom(key, null); return json({ ok: true }); }
+        if (op === 'custom-check') { const results = await radio.healthSweep(store, { only: key, max: 1, durationMs: 6000 }); return json({ ok: true, results }); }
         const suggest = await store.getRadioSuggest(), node = suggest[key]; if (!node || !node.u) return json({ error: 'Suggestion not found.' }, 404);
-        if (op === 'sug-reject') { await store.removeRadioSuggest(key); await store.addRadioReject(key); return json({ ok: true }); }
-        if (op === 'sug-test') { const resolved = await require('./radio-custom').resolveStation(String(node.u)); const probe = resolved.ok ? await require('./radio-custom').probeSafe(resolved.url) : null; return json({ resolved, probe }); }
+        if (op === 'sug-reject') { await store.addRadioReject(key, { at: Date.now(), u: String(node.u), n: String(node.n || ''), orig: String(node.orig || ''), by: node.by || null }); await store.removeRadioSuggest(key); return json({ ok: true }); }
+        if (op === 'sug-test') {   // TEST AGAIN: the server checks the stream again (8 s) and stores the new verdict on the submission
+          const verdict = await validate.validateStream(String(node.u), { durationMs: 8000 }), now = Date.now();
+          await store.updateRadioSuggest(key, current => (current && current.u ? { ...current, u: verdict.ok ? verdict.url : current.u, status: verdict.ok ? 'VALID' : 'INVALID', v: validate.compactVerdict(verdict), checkedAt: now } : current));
+          return json({ ok: true, status: verdict.ok ? 'VALID' : 'INVALID', v: validate.compactVerdict(verdict), checkedAt: now });
+        }
         const cat = String(input.cat || ''); if (!radio.CUSTOM_TARGETS.includes(cat)) return json({ error: 'Bad category.' }, 400);
         const name = String(input.name || node.n || '').replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 48); if (name.length < 2) return json({ error: 'Name too short.' }, 400);
-        const resolved = await require('./radio-custom').resolveStation(String(node.u)); if (!resolved.ok && input.force !== true) return json({ error: 'Does not play: ' + resolved.why, why: resolved.why }, 409);
-        const url = resolved.ok ? resolved.url : String(node.u);
-        await store.setRadioCustom(require('./radio-reports').radioKey(url), { u: url, n: name, c: (resolved.ok && resolved.codec) || '', b: (resolved.ok && resolved.bitrate) || 0, cat, at: Date.now() });   // stored under the key of the address that is PLAYED (hide / move / reports use the same key)
+        const fresh = node.v && node.v.ok && Date.now() - number(node.checkedAt) < 10 * 60000, verdict = fresh ? node.v : await validate.validateStream(String(node.u), { durationMs: 4000 });
+        if (!verdict.ok && input.force !== true) return json({ error: 'Does not play: ' + verdict.why, why: verdict.why }, 409);
+        const url = verdict.ok ? String(verdict.url || node.u) : String(node.u), now = Date.now();
+        await store.setRadioCustom(require('./radio-reports').radioKey(url), { u: url, n: name, c: (verdict.ok && verdict.codec) || '', b: (verdict.ok && verdict.bitrate) || 0, sr: (verdict.ok && verdict.sampleRate) || 0, ch: (verdict.ok && verdict.channels) || 0, cat, at: now, orig: String(node.orig || ''), by: node.by || null,
+          health: { status: verdict.ok ? (verdict.warnings && verdict.warnings.length ? 'DEGRADED' : 'OK') : 'OFFLINE', at: now, why: verdict.ok ? '' : String(verdict.why || '') } });   // stored under the key of the address that is PLAYED (hide / move / reports use the same key)
         await store.removeRadioSuggest(key); return json({ ok: true });
       }
       if (op === 'stations') {   // every station of the list once, with the categories it is in, whether it is moved / hidden (the station manager)
@@ -620,6 +633,8 @@ const accountHandler = async event => {
 
 // Sets / renews / clears the session cookie around the handler: create, a password login and a password change hand out a new token (cookie = that token); a successful silent restore renews it
 // (this also gives devices that logged in before the cookie existed their cookie); logout and a refused silent restore clear it.
+// the player behind a session token (null when the token is not valid): radio.js records WHO added a station only for a valid session
+exports.verifyPlayer = async (id, token) => { const account = await read(id); return account && tokenMatches(account, token) ? { id: account.id, name: String(account.name || '').slice(0, 30) } : null; };
 exports.handler = async event => {
   const res = await accountHandler(event);
   if (!res || event.httpMethod === 'OPTIONS') return res;

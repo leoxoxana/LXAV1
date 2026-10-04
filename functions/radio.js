@@ -3,7 +3,7 @@
 // Source: Radio Browser (community directory, no key). Pipeline: Romanian stations per category (tags + name), HTTPS + MP3/AAC + direct url_resolved only,
 // de-duplicated, a REAL reachability probe (first bytes of audio), then - only where Romania has too few working stations - a few top-voted foreign ones.
 // The result is cached in memory and in Firebase (meta/radio), so a Radio Browser outage never empties the player: the last good list is served instead.
-const crypto = require('crypto'), fs = require('fs'), reports = require('./radio-reports'), custom = require('./radio-custom'), { popularity, collectListeners } = require('./radio-popularity');
+const crypto = require('crypto'), fs = require('fs'), reports = require('./radio-reports'), custom = require('./radio-custom'), validate = require('./radio-validate'), { popularity, collectListeners } = require('./radio-popularity');
 // Version of the list builder = hash of this very file. A list stored (memory / Firebase) by a different version is rebuilt on the next request, so a deploy never keeps serving the list
 // of the previous code for the 12 h freshness window (that is exactly what kept 39 manele stations on the live site after the fix was deployed).
 const BUILDER_VERSION = (() => { try { return crypto.createHash('sha1').update(fs.readFileSync(__filename)).digest('hex').slice(0, 12); } catch (error) { return 'unknown'; } })();
@@ -110,10 +110,10 @@ async function probeOnce(url, timeoutMs, headers) {
   try {
     const response = await fetch(url, { signal: controller.signal, headers });
     const type = String(response.headers.get('content-type') || '').toLowerCase();
-    if (!response.ok) { try { response.body && response.body.cancel(); } catch (error) { /* ignore */ } return done(false, 'http ' + response.status); }
-    if (!/audio|mpeg|aac|ogg|octet-stream/.test(type) || /mpegurl/.test(type)) { try { response.body && response.body.cancel(); } catch (error) { /* ignore */ } return done(false, 'type ' + (type || 'none').slice(0, 30)); }
+    if (!response.ok) { try { response.body && Promise.resolve(response.body.cancel()).catch(() => {}); } catch (error) { /* ignore */ } return done(false, 'http ' + response.status); }
+    if (!/audio|mpeg|aac|ogg|octet-stream/.test(type) || /mpegurl/.test(type)) { try { response.body && Promise.resolve(response.body.cancel()).catch(() => {}); } catch (error) { /* ignore */ } return done(false, 'type ' + (type || 'none').slice(0, 30)); }
     const reader = response.body.getReader(), { value } = await reader.read();
-    try { reader.cancel(); } catch (error) { /* ignore */ }
+    try { Promise.resolve(reader.cancel()).catch(() => {}); } catch (error) { /* ignore */ }
     if (!value || value.length <= 200) return done(false, 'no audio');
     if (value[0] === 0x3c) return done(false, 'html body');   // "<": a web page behind an audio content-type
     return done(true, 'ok');
@@ -347,27 +347,73 @@ async function handleFav(body, storage) {
   try { const result = await storage.setRadioFav(reports.radioKey(u), device, body.on); servingCache = null; return reply({ ok: true, changed: Boolean(result && result.changed) }, 200, { 'cache-control': 'no-store' }); }
   catch (error) { return reply({ error: 'Not saved.' }, 503, { 'cache-control': 'no-store' }); }
 }
-// POST {action:'suggest', u, n, dev}: a player offers the link of HIS station to the owner (only when he taps 📨). Nothing becomes public by this: the owner decides in admin > RADIO > 📨.
-// https links only, no user:password@, one row per link (the players who sent it are counted), 5 per hour per device, 200 per day for everybody, a rejected link is accepted silently and dropped.
-async function handleSuggest(body, storage) {
-  const u = custom.cleanStreamUrl(body.u), dev = String(body.dev || ''), name = String(body.n || '').replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
-  if (!u || !/^https:/i.test(u) || !/^[a-z0-9]{8,40}$/i.test(dev)) return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' });
-  const device = reports.deviceKey(dev), key = reports.radioKey(u);
-  if (!reports.allow('sug' + device, Date.now(), 5)) return reply({ error: 'Too many suggestions.' }, 429, { 'cache-control': 'no-store' });
+// POST {action:'submit', u, n, dev, id?, token?} (also accepted as 'suggest'): a player adds HIS station. The server is the judge: it validates the stream itself (radio-validate.js) and the answer
+// tells him whether he can PLAY it at once. Nothing becomes public by this: the submission is saved automatically (Firebase radioSuggest/<key>, status VALID / INVALID) and waits for the owner in
+// admin > RADIO. The player cannot send or change a status, a verdict or an approval: the body only carries the link, a name, his device id and (optional) his login so the owner knows who sent it.
+// Duplicates are decided here, on the canonical address (http/https, www., port 80/443, trailing slash, Shoutcast "/;", tracking parameters are the same stream), inside one Firebase transaction.
+let validator = validate.validateStream, accountVerifier = null;
+exports.__setValidator = fn => { validator = fn || validate.validateStream; };
+exports.__setAccountVerifier = fn => { accountVerifier = fn || null; };
+const blockedWhy = raw => { try { const u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : 'https://' + raw); return u.protocol === 'http:' || u.protocol === 'https:' ? 'blocked' : 'bad-url'; } catch (error) { return 'bad-url'; } };
+// canonical address -> where the station is already: the public list or the approved stations of players
+async function knownIndex(storage) {
+  if (!memory) memory = await loadStored(storage);
+  const known = new Map();
+  for (const cat of (memory && memory.cats) || []) for (const item of cat.items) { const key = validate.canonicalStream(item.u); if (key && !known.has(key)) known.set(key, { where: 'public', item }); }
+  for (const station of (await servingState(storage)).customs || []) { const key = validate.canonicalStream(station.u); if (key) known.set(key, { where: 'approved', item: { n: station.n, u: station.u, c: station.c, b: station.b } }); }
+  return known;
+}
+// the part of a verdict a player may see (the technical details stay with the owner)
+const playerView = (verdict, extra) => ({ ok: Boolean(verdict.ok), status: verdict.ok ? 'VALID' : 'INVALID', why: verdict.ok ? '' : String(verdict.why || 'unreachable'), url: verdict.ok ? verdict.url : '', name: String(verdict.name || ''), codec: String(verdict.codec || ''), bitrate: Number(verdict.bitrate) || 0,
+  sampleRate: Number(verdict.sampleRate) || 0, channels: Number(verdict.channels) || 0, stable: verdict.stable === undefined ? null : verdict.stable, warnings: verdict.warnings || [], hls: Boolean(verdict.hls), iosOk: verdict.iosOk !== false, phoneOk: verdict.phoneOk !== false, ...extra });
+async function handleSubmit(body, event, storage) {
+  const raw = String(body.u || '').trim(), dev = String(body.dev || ''), headers = (event && event.headers) || {};
+  if (!raw || raw.length > custom.MAX_URL || !/^[a-z0-9]{8,40}$/i.test(dev) || !storage) return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' });
+  const name = String(body.n || '').replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 40), now = Date.now();
+  const input = custom.cleanStreamUrl(raw);
+  if (!input) return reply({ ok: false, status: 'INVALID', why: blockedWhy(raw) }, 200, { 'cache-control': 'no-store' });
+  const device = reports.deviceKey(dev), who = String(headers['x-vercel-forwarded-for'] || headers['x-forwarded-for'] || headers['X-Forwarded-For'] || 'anon').split(',')[0].trim();
+  if (!reports.allow('sub' + device, now, 8) || !reports.allow('val' + who, now, 15)) return reply({ ok: false, status: 'INVALID', why: 'limit' }, 429, { 'cache-control': 'no-store' });
   try {
-    if (((await storage.getRadioRejected()) || {})[key]) return reply({ ok: true }, 200, { 'cache-control': 'no-store' });
-    if (!memory) memory = await loadStored(storage);
-    if (stationIndex(memory, (await servingState(storage)).customs).has(key)) return reply({ ok: true, known: true }, 200, { 'cache-control': 'no-store' });   // it is in the list already
-    if (!(await storage.bumpSuggestDay(new Date().toISOString().slice(0, 10), 200))) return reply({ error: 'Too many suggestions today.' }, 429, { 'cache-control': 'no-store' });
-    const now = Date.now(); await storage.updateRadioSuggest(key, current => custom.applySuggestion(current, { u, n: name, device }, now));
-    return reply({ ok: true }, 200, { 'cache-control': 'no-store' });
+    const canonIn = validate.canonicalStream(input), keyIn = reports.radioKey(canonIn), rejected = (await storage.getRadioRejected()) || {}, known = await knownIndex(storage);
+    const inList = known.get(canonIn);
+    if (inList) return reply({ ok: true, status: inList.where === 'approved' ? 'APPROVED' : 'PUBLIC', why: '', url: inList.item.u, name: inList.item.n, codec: String(inList.item.c || ''), bitrate: Number(inList.item.b) || 0, queued: false, dup: inList.where, stable: null, warnings: [], hls: false, iosOk: true, phoneOk: true }, 200, { 'cache-control': 'no-store' });
+    let by = null;
+    if (body.id !== undefined && body.token) { try { const verify = accountVerifier || require('./lxa-account').verifyPlayer; by = verify ? await verify(body.id, String(body.token)) : null; } catch (error) { by = null; } }   // an account is recorded ONLY when the session token is valid
+    // the same address is already waiting for the owner and was checked recently: no second check (saves the network, cannot flip a good verdict); only the player is added to the row
+    const prior = storage.getRadioSuggestNode ? await storage.getRadioSuggestNode(keyIn).catch(() => null) : null;
+    const reused = Boolean(prior && prior.u && prior.status === 'VALID' && prior.v && prior.v.ok && now - Number(prior.checkedAt || 0) < 6 * 3600 * 1000);
+    const verdict = reused ? { ...prior.v, ok: true, url: prior.u, name: prior.n || '' } : await validator(input, { durationMs: validate.READ_MS });
+    const canonOut = verdict.ok ? validate.canonicalStream(verdict.url) || canonIn : canonIn, keyOut = reports.radioKey(canonOut), placed = known.get(canonOut);
+    if (placed) return reply(playerView(verdict, { queued: false, dup: placed.where }), 200, { 'cache-control': 'no-store' });   // the page / playlist he pasted leads to a stream that is in the list already
+    if (rejected[keyIn] || rejected[keyOut]) return reply(playerView(verdict, { queued: false, dup: 'rejected' }), 200, { 'cache-control': 'no-store' });
+    if (!(await storage.bumpSuggestDay(new Date(now).toISOString().slice(0, 10), 200))) return reply(playerView(verdict, { queued: false, dup: 'new', note: 'day-limit' }), 200, { 'cache-control': 'no-store' });
+    let existed = false;
+    await storage.updateRadioSuggest(keyOut, current => { existed = Boolean(current && current.u); return validate.applySubmission(current, { u: verdict.ok ? verdict.url : input, orig: raw, canon: canonOut, n: name || verdict.name, device, by, verdict, reused }, now); });
+    return reply(playerView(verdict, { queued: true, dup: existed ? 'pending' : 'new' }), 200, { 'cache-control': 'no-store' });
   } catch (error) { return reply({ error: 'Not saved.' }, 503, { 'cache-control': 'no-store' }); }
+}
+// health of the APPROVED stations of players: checked in small batches (oldest check first), the result is written to the station (OK / DEGRADED / OFFLINE); nothing is ever deleted or hidden by this
+async function healthSweep(storage, { max = 8, budgetMs = 25000, durationMs = 3000, only = '' } = {}) {
+  const started = Date.now(), customs = Object.entries((await storage.getRadioCustoms()) || {}).filter(([key, v]) => v && v.u && (!only || key === only));
+  customs.sort((a, b) => ((a[1].health && a[1].health.at) || 0) - ((b[1].health && b[1].health.at) || 0));
+  const results = [], queue = customs.slice(0, max);
+  const worker = async () => {
+    while (queue.length && Date.now() - started < budgetMs) {
+      const [key, node] = queue.shift(); let verdict;
+      try { verdict = await validator(node.u, { durationMs, resolve: async url => ({ ok: true, url, name: '', codec: node.c || '' }) }); } catch (error) { verdict = { ok: false, why: 'unreachable' }; }
+      const health = { status: validate.healthOf(verdict), at: Date.now(), why: verdict.ok ? '' : String(verdict.why || ''), kbps: Number(verdict.measuredKbps) || 0, stalls: Number(verdict.stalls) || 0, codec: String(verdict.codec || ''), bitrate: Number(verdict.bitrate) || 0, warnings: verdict.warnings || [] };
+      try { await storage.patchRadioCustomHealth(key, health); results.push({ key, ...health }); } catch (error) { /* the next sweep tries again */ }
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  return results;
 }
 async function handleReport(event, storage) {
   const raw = String(event.body || ''); if (raw.length > reports.MAX_BODY) return reply({ error: 'Too large.' }, 413, { 'cache-control': 'no-store' });
   let body; try { body = JSON.parse(raw || '{}'); } catch (error) { return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' }); }
   if (body && body.action === 'fav') return handleFav(body, storage);
-  if (body && body.action === 'suggest') return handleSuggest(body, storage);
+  if (body && (body.action === 'submit' || body.action === 'suggest')) return handleSubmit(body, event, storage);
   const headers = event.headers || {}, report = body && body.action === 'report' ? reports.cleanReport(body, headers['user-agent'] || headers['User-Agent']) : null;
   if (!report) return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' });
   if (!reports.allow(report.dev)) return reply({ error: 'Too many reports.' }, 429, { 'cache-control': 'no-store' });
@@ -395,10 +441,11 @@ exports.handler = async event => {
   try {
     const { data, stale, rechecked } = await getList({ refresh: String(query.refresh || '') === '1', recheck: String(query.recheck || '') === '1', storage });
     const state = await servingState(storage);
+    if (String(query.refresh || '') === '1' && storage) { try { await healthSweep(storage, { max: 8, budgetMs: 20000 }); } catch (error) { /* the list is served anyway */ } }   // the daily cron also checks the approved stations of players
     return reply({ ...servedList(data, state), stale }, 200, { 'cache-control': rechecked ? 'no-store' : stale ? 'public, s-maxage=60' : 'public, s-maxage=300, stale-while-revalidate=900' });
   } catch (error) {
     return reply({ error: 'Radio list temporarily unavailable.' }, 503, { 'cache-control': 'no-store' });
   }
 };
 exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.stationIndex = stationIndex; exports.MOVE_TARGETS = MOVE_TARGETS; exports.CUSTOM_TARGETS = CUSTOM_TARGETS; exports.__resetHidden = () => { servingCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
-exports.__resetMemory = () => { memory = null; building = null; };
+exports.knownIndex = knownIndex; exports.healthSweep = healthSweep; exports.playerView = playerView; exports.__resetMemory = () => { memory = null; building = null; };
