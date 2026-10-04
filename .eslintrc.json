@@ -36,6 +36,7 @@
       "env": { "browser": true, "es2021": true },
       "globals": {
         "LxaGameEngine": "readonly",
+    "LXAAdminRadio": "readonly",
         "lxaSaveState": "writable"
       },
       "rules": {
@@ -47,9 +48,9 @@
       "env": { "browser": true, "es2021": true }
     },
     {
-      "files": ["header-fit.js", "boot-wild-preload.js", "sw-register.js", "radio.js"],
+      "files": ["header-fit.js", "boot-wild-preload.js", "sw-register.js", "radio.js", "admin-radio.js"],
       "env": { "browser": true, "es2021": true },
-      "globals": { "LXASpinButton": "readonly", "lang": "readonly" }
+      "globals": { "LXASpinButton": "readonly", "lang": "readonly", "lxaRequest": "readonly", "lxaAccount": "readonly", "renderAccountPanel": "readonly", "lxaRadioCache": "writable" }
     },
     {
       "files": ["sw.js"],

@@ -1,6 +1,6 @@
 // RADIO HEALTH: strict two-client probe, periodic re-check, anonymous player reports, owner's hide list + admin actions.
 jest.mock('./functions/firebase-storage.js', () => {
-  let accounts = {}, cache = null, reports = {}, hidden = {};
+  let accounts = {}, cache = null, reports = {}, hidden = {}, moves = {}, favs = {}; const favDev = new Set();
   const copy = v => (v === null || v === undefined ? v : JSON.parse(JSON.stringify(v)));
   return {
     getAccounts: async () => copy(accounts), saveAccounts: async n => { accounts = n; },
@@ -10,7 +10,11 @@ jest.mock('./functions/firebase-storage.js', () => {
     updateRadioReport: async (key, mutate) => { const next = mutate(copy(reports[key])); if (next === undefined) throw new Error('no commit'); reports[key] = next; },
     getRadioReports: async () => copy(reports), clearRadioReport: async key => { delete reports[key]; },
     getRadioHidden: async () => copy(hidden), setRadioHidden: async (key, v) => { if (v) hidden[key] = v; else delete hidden[key]; },
-    __reset: () => { accounts = {}; cache = null; reports = {}; hidden = {}; }, __put: (k, a) => { accounts[k] = a; }, __cache: c => { cache = c; }, __reports: () => reports, __hidden: () => hidden
+    getRadioMoves: async () => copy(moves), setRadioMove: async (key, v) => { if (v) moves[key] = v; else delete moves[key]; },
+    getRadioFavCounts: async () => copy(favs),
+    setRadioFav: async (key, device, on) => { const id = device + key, had = favDev.has(id); if (on) favDev.add(id); else favDev.delete(id); const changed = had !== on; if (changed) { favs[key] = Math.max(0, (favs[key] || 0) + (on ? 1 : -1)); if (!favs[key]) delete favs[key]; } return { changed }; },
+    __moves: () => moves, __favs: () => favs, __setFavs: v => { favs = v; },
+    __reset: () => { accounts = {}; cache = null; reports = {}; hidden = {}; moves = {}; favs = {}; favDev.clear(); }, __put: (k, a) => { accounts[k] = a; }, __cache: c => { cache = c; }, __reports: () => reports, __hidden: () => hidden
   };
 });
 
@@ -241,5 +245,125 @@ describe('blocked host (Radio Marketescu on radiolize.com does not play on the o
     await radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ action: 'report', u: URL_A, kind: 'manual', code: 'nostart', dev: 'abcdef123456abcd' }) });
     expect(storage.__reports()[health.radioKey(URL_A)].c).toBe('AAC 192');
     expect(health.summarize(storage.__reports(), {}).reports[0].c).toBe('AAC 192');
+  });
+});
+describe('RETRO and GLOBAL categories (build)', () => {
+  let n = 0;
+  const st = (over = {}) => { n++; return { stationuuid: 'r' + n, name: 'Station R' + n, url_resolved: 'https://r' + n + '.example.ro/live', codec: 'MP3', bitrate: 128, lastcheckok: 1, hls: 0, ssl_error: 0, countrycode: 'RO', tags: 'pop', clickcount: 100 + n, votes: 10, ...over }; };
+  const run = (ro, global = [], probe = async () => true) => radio.buildList({ fetchRo: async () => ro, fetchRoAll: async () => [], fetchForeign: async () => [], fetchGlobal: async () => global, probe, now: Date.now });
+  const items = (data, id) => data.cats.find(c => c.id === id).items.map(i => i.n);
+  test('RETRO: 80s / 90s / oldies stations (also "90\'s" in the name); manele "vechi" and folk are not retro', async () => {
+    const data = await run([st({ name: "Play 90's", tags: '90s,pop' }), st({ name: 'Oldies FM', tags: 'oldies' }), st({ name: 'Radio 80s Hits', tags: '80s,hits' }), st({ name: 'Manele Vechi', tags: 'manele vechi,retro' }), st({ name: 'Folclor Retro', tags: 'folclor,retro' }), st({ name: 'Plain Pop', tags: 'pop' })]);
+    expect(items(data, 'retro').sort()).toEqual(['Oldies FM', "Play 90's", 'Radio 80s Hits']);
+    expect(items(data, 'manele')).toEqual(['Manele Vechi']);
+  });
+  test('GLOBAL: the most listened music of the whole world that really plays, news / talk left out, foreign ones carry their country', async () => {
+    const world = [st({ name: 'BBC World News', countrycode: 'GB', tags: 'news', clickcount: 9000 }), st({ name: 'Big US Pop', countrycode: 'US', tags: 'pop', clickcount: 8000 }), st({ name: 'Dead DE', countrycode: 'DE', tags: 'pop', clickcount: 7000 }), st({ name: 'Good FR', countrycode: 'FR', tags: 'electro', clickcount: 6000 }), st({ name: 'Ro Top', countrycode: 'RO', tags: 'pop', clickcount: 5000 })];
+    const dead = world[2].url_resolved;
+    const data = await run([], world, async url => url !== dead);
+    expect(items(data, 'global')).toEqual(['Big US Pop', 'Good FR', 'Ro Top']);
+    expect(data.cats.find(c => c.id === 'global').items.map(i => i.cc)).toEqual(['US', 'FR', 'RO']);
+  });
+  test('GLOBAL has at most 40 stations, 4 per country, one per name, and a failing global query does not break the rest of the build', async () => {
+    const countries = ['US', 'FR', 'DE', 'GB', 'JP', 'BR', 'IN', 'NG', 'ES', 'IT'], world = Array.from({ length: 90 }, (_, i) => st({ name: 'World ' + i, countrycode: countries[i % 10], clickcount: 9000 - i }));
+    const data = await run([st({ name: 'Local Pop', tags: 'pop' })], world);
+    expect(items(data, 'global')).toHaveLength(40);
+    const perCountry = {}; for (const i of data.cats.find(c => c.id === 'global').items) perCountry[i.cc] = (perCountry[i.cc] || 0) + 1; expect(Math.max(...Object.values(perCountry))).toBe(4);   // at most 4 per country: 10 countries x 4
+    const broken = await radio.buildList({ fetchRo: async () => [st({ name: 'Local Pop', tags: 'pop' })], fetchRoAll: async () => [], fetchForeign: async () => [], fetchGlobal: async () => { throw new Error('boom'); }, probe: async () => true, now: Date.now });
+    expect(items(broken, 'pop')).toEqual(['Local Pop']); expect(items(broken, 'global')).toEqual([]);
+  });
+});
+
+describe('served list: TOP (the players\' stars) and moves', () => {
+  const state = (over = {}) => ({ hidden: new Set(), moves: new Map(), favs: new Map(), ...over });
+  const key = u => health.radioKey(u);
+  const ids = data => data.cats.map(c => c.id);
+  test('the served list always ends with TOP: 12 tabs once the build has all 11', () => {
+    const full = { cats: ['manele', 'etno', 'rap', 'house', 'techno', 'dance', 'pop', 'rock', 'chill', 'retro', 'global'].map(id => ({ id, emoji: 'x', label: id, items: [] })) };
+    const out = radio.servedList(full, state()); expect(ids(out)).toHaveLength(12); expect(ids(out)[11]).toBe('top'); expect(out.cats[11].items).toEqual([]);
+  });
+  test('TOP: stations starred by at least 2 players, most starred first, once each, without flame / style marks; hidden ones are not in it', () => {
+    const data = { cats: [{ id: 'manele', emoji: 'x', label: 'M', items: [{ ...item('Alpha', URL_A), top: 1, s: ['trap'], m: 1 }, item('Beta', URL_B)] }, { id: 'pop', emoji: 'y', label: 'P', items: [item('Beta', URL_B), item('Gamma', URL_C)] }] };
+    const favs = new Map([[key(URL_A), 2], [key(URL_B), 5], [key(URL_C), 1]]);
+    let top = radio.servedList(data, state({ favs })).cats.find(c => c.id === 'top').items;
+    expect(top.map(i => i.n)).toEqual(['Beta', 'Alpha']); expect(top[1].top).toBeUndefined(); expect(top[1].s).toBeUndefined(); expect(top[1].m).toBeUndefined();
+    top = radio.servedList(data, state({ favs, hidden: new Set([key(URL_B)]) })).cats.find(c => c.id === 'top').items; expect(top.map(i => i.n)).toEqual(['Alpha']);
+  });
+  test('TOP shows at most the 40 most starred', () => {
+    const many = Array.from({ length: 60 }, (_, i) => item('S' + i, 'https://s' + i + '.example.ro/x')), favs = new Map(many.map((m, i) => [key(m.u), 2 + i]));
+    const top = radio.servedList({ cats: [{ id: 'pop', emoji: 'y', label: 'P', items: many }] }, state({ favs })).cats.find(c => c.id === 'top').items;
+    expect(top).toHaveLength(40); expect(top[0].n).toBe('S59');
+  });
+  test('a moved station leaves every category, goes to the TOP of its new category without the flame; a missing target category is ignored', () => {
+    const data = { cats: [{ id: 'manele', emoji: 'x', label: 'M', items: [{ ...item('Alpha', URL_A), top: 1, s: ['trap'] }, item('Beta', URL_B)] }, { id: 'etno', emoji: 'y', label: 'E', items: [item('Gamma', URL_C)] }, { id: 'pop', emoji: 'z', label: 'P', items: [item('Alpha', URL_A)] }] };
+    const out = radio.servedList(data, state({ moves: new Map([[key(URL_A), 'etno']]) })), by = id => out.cats.find(c => c.id === id).items.map(i => i.n);
+    expect(by('manele')).toEqual(['Beta']); expect(by('pop')).toEqual([]); expect(by('etno')).toEqual(['Alpha', 'Gamma']);
+    expect(out.cats.find(c => c.id === 'etno').items[0].top).toBeUndefined(); expect(out.cats.find(c => c.id === 'etno').items[0].s).toBeUndefined();
+    const ignored = radio.servedList(data, state({ moves: new Map([[key(URL_A), 'nowhere']]) })); expect(ignored.cats.find(c => c.id === 'manele').items.map(i => i.n)).toEqual(['Alpha', 'Beta']);   // the target does not exist: the station stays where it was
+  });
+  test('a moved station can be starred into TOP too, and the original arrays are never modified', () => {
+    const data = { cats: [{ id: 'manele', emoji: 'x', label: 'M', items: [item('Alpha', URL_A)] }, { id: 'etno', emoji: 'y', label: 'E', items: [] }] };
+    const out = radio.servedList(data, state({ moves: new Map([[key(URL_A), 'etno']]), favs: new Map([[key(URL_A), 3]]) }));
+    expect(out.cats.find(c => c.id === 'top').items.map(i => i.n)).toEqual(['Alpha']); expect(data.cats[0].items).toHaveLength(1); expect(data.cats).toHaveLength(2);
+  });
+});
+
+describe('stars (POST fav) feed TOP; admin moves', () => {
+  const post = body => radio.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify(body) });
+  const fav = (dev, on = true, u = URL_A) => post({ action: 'fav', u, on, dev });
+  const get = async () => JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body);
+  test('one vote per device and station; two players put the station into TOP (served within the cache time); un-starring removes the vote', async () => {
+    await stored();
+    expect((await fav('device0000000001')).statusCode).toBe(200); expect((await fav('device0000000001')).statusCode).toBe(200);   // the same device twice: still one vote
+    expect(storage.__favs()[health.radioKey(URL_A)]).toBe(1);
+    radio.__resetHidden(); expect((await get()).cats.find(c => c.id === 'top').items).toEqual([]);   // 1 player is not enough
+    await fav('device0000000002'); radio.__resetHidden();
+    expect((await get()).cats.find(c => c.id === 'top').items.map(i => i.n)).toEqual(['Alpha']);
+    await fav('device0000000002', false); expect(storage.__favs()[health.radioKey(URL_A)]).toBe(1);
+  });
+  test('refused: a station that is not in the list (404), junk (400), no boolean, and the 61st change of one device within an hour (429)', async () => {
+    await stored();
+    expect((await fav('device0000000003', true, 'https://nowhere.example.com/x')).statusCode).toBe(404);
+    expect((await post({ action: 'fav', u: URL_A, on: 'yes', dev: 'device0000000003' })).statusCode).toBe(400);
+    expect((await post({ action: 'fav', u: 'http://a.example.ro/x', on: true, dev: 'device0000000003' })).statusCode).toBe(400);
+    expect((await post({ action: 'fav', u: URL_A, on: true, dev: 'x' })).statusCode).toBe(400);
+    let last; for (let i = 0; i < 61; i++) last = await fav('device0000000004', i % 2 === 0);
+    expect(last.statusCode).toBe(429);
+  });
+  describe('admin', () => {
+    let call;
+    const setup = async () => {
+      jest.resetModules(); storage = require('./functions/firebase-storage.js'); storage.__reset(); radio = require('./functions/radio.js'); radio.__resetMemory(); radio.__resetHidden(); require('./functions/radio-reports.js').__resetLimiter();
+      storage.__put('1 : Boss', { id: 1, name: 'Boss', safeWord: 'pw', role: 'admin', balance: 100, difficulty: 2, createdAt: 1 });
+      storage.__cache({ updatedAt: Date.now(), v: radio.BUILDER_VERSION, cats: [{ id: 'manele', emoji: 'F', label: 'MANELE', items: [item('Alpha', URL_A), item('Beta', URL_B)] }, { id: 'etno', emoji: 'E', label: 'ETNO', items: [] }, { id: 'pop', emoji: 'P', label: 'POP', items: [item('Beta', URL_B), item('Gamma', URL_C)] }, { id: 'global', emoji: 'G', label: 'GLOBAL', items: [item('Gamma', URL_C)] }] });
+      const { handler } = require('./functions/lxa-account.js'); let ip = 0;
+      call = async data => { const r = await handler({ httpMethod: 'POST', headers: { 'x-vercel-forwarded-for': '10.8.0.' + (ip++ & 255) }, body: JSON.stringify({ action: 'admin-radio', id: 1, safeWord: 'pw', ...data }) }); return { status: r.statusCode, body: JSON.parse(r.body) }; };
+    };
+    test('stations: every station once with its categories, moved / hidden flags; the move targets exclude TOP and GLOBAL', async () => {
+      await setup(); const r = (await call({ op: 'stations' })).body;
+      expect(r.stations.map(s => s.n)).toEqual(['Alpha', 'Beta', 'Gamma']); expect(r.stations.find(s => s.n === 'Beta').cats).toEqual(['manele', 'pop']); expect(r.stations.find(s => s.n === 'Gamma').cats).toEqual(['pop', 'global']);
+      expect(r.categories.map(c => c.id)).toEqual(['manele', 'etno', 'pop']);
+    });
+    test('move -> the served list shows it in the new category at once; the station manager shows it moved; unmove restores the automatic place', async () => {
+      await setup(); const key = health.radioKey(URL_A);
+      expect((await call({ op: 'move', key, cat: 'etno' })).body.ok).toBe(true); expect(storage.__moves()[key]).toMatchObject({ u: URL_A, n: 'Alpha', cat: 'etno' });
+      radio.__resetHidden(); let served = JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body);
+      expect(served.cats.find(c => c.id === 'etno').items.map(i => i.n)).toEqual(['Alpha']); expect(served.cats.find(c => c.id === 'manele').items.map(i => i.n)).toEqual(['Beta']);
+      expect((await call({ op: 'stations' })).body.stations.find(s => s.n === 'Alpha').moved).toBe('etno');
+      expect((await call({ op: 'list' })).body.categories.map(c => c.id)).toEqual(['manele', 'etno', 'pop']);
+      await call({ op: 'unmove', key }); radio.__resetHidden(); served = JSON.parse((await radio.handler({ httpMethod: 'GET', queryStringParameters: {} })).body);
+      expect(served.cats.find(c => c.id === 'manele').items.map(i => i.n)).toEqual(['Alpha', 'Beta']);
+    });
+    test('any station of the list can be hidden (reported or not) and shows up as hidden in the station manager', async () => {
+      await setup(); const key = health.radioKey(URL_C);
+      expect((await call({ op: 'hide', key })).body.ok).toBe(true);
+      expect((await call({ op: 'stations' })).body.stations.find(s => s.n === 'Gamma').hidden).toBe(true);
+    });
+    test('move is refused for a bad key, an unknown station, a category that is not a target (top, global, junk)', async () => {
+      await setup(); const key = health.radioKey(URL_A);
+      expect((await call({ op: 'move', key: 'zz', cat: 'etno' })).status).toBe(400);
+      expect((await call({ op: 'move', key: '0123456789abcdef', cat: 'etno' })).status).toBe(404);
+      for (const cat of ['top', 'global', 'nope', '']) expect((await call({ op: 'move', key, cat })).status).toBe(400);
+    });
   });
 });

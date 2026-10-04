@@ -44,10 +44,10 @@ function applyReport(current, report, name, now, codec) {
 
 // small per-instance limiter (the report endpoint is public): 30 reports / hour / device, and the table cannot grow without bound
 const hits = new Map();
-function allow(dev, now = Date.now()) {
+function allow(dev, now = Date.now(), limit = LIMIT_PER_HOUR) {
   if (hits.size > LIMIT_DEVICES) hits.clear();
   const recent = (hits.get(dev) || []).filter(t => now - t < 3600000);
-  if (recent.length >= LIMIT_PER_HOUR) { hits.set(dev, recent); return false; }
+  if (recent.length >= limit) { hits.set(dev, recent); return false; }
   recent.push(now); hits.set(dev, recent); return true;
 }
 
@@ -63,5 +63,5 @@ function summarize(reports, hidden, now = Date.now()) {
   return { reports: rows.slice(0, 100), hidden: hiddenRows };
 }
 
-exports.DEDUPE_MS = DEDUPE_MS; exports.MAX_BODY = MAX_BODY; exports.radioKey = radioKey; exports.platformOf = platformOf; exports.cleanReport = cleanReport; exports.applyReport = applyReport; exports.allow = allow; exports.summarize = summarize;
+exports.DEDUPE_MS = DEDUPE_MS; exports.MAX_BODY = MAX_BODY; exports.radioKey = radioKey; exports.deviceKey = dev => sha(String(dev).toLowerCase(), 12); exports.platformOf = platformOf; exports.cleanReport = cleanReport; exports.applyReport = applyReport; exports.allow = allow; exports.summarize = summarize;
 exports.__resetLimiter = () => hits.clear();

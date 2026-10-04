@@ -151,6 +151,35 @@ async function setRadioHidden(key, value) {
   if (value) await db.ref(`meta/radioHide/${key}`).set(value); else await db.ref(`meta/radioHide/${key}`).remove();
 }
 
+// Radio: the owner's moves (`meta/radioMove/<key>` = {u, n, cat, at}) and the players' stars (TOP): one membership node per device and station (`radioFavDev/<device>/<key>`) and ONE counter per station
+// (`meta/radioFav/<key>`), so the list is served from a few hundred small numbers, never from per-player records.
+async function getRadioMoves() {
+  initFirebase();
+  if (!db) return {};
+  return (await db.ref('meta/radioMove').once('value')).val() || {};
+}
+async function setRadioMove(key, value) {
+  initFirebase();
+  if (!db) throw new Error('Firebase not initialized');
+  if (value) await db.ref(`meta/radioMove/${key}`).set(value); else await db.ref(`meta/radioMove/${key}`).remove();
+}
+async function getRadioFavCounts() {
+  initFirebase();
+  if (!db) return {};
+  return (await db.ref('meta/radioFav').once('value')).val() || {};
+}
+const MAX_FAV_PER_DEVICE = 60;
+async function setRadioFav(key, device, on) {
+  initFirebase();
+  if (!db) throw new Error('Firebase not initialized');
+  if (on) { const mine = await db.ref(`radioFavDev/${device}`).once('value'); if (mine.numChildren() >= MAX_FAV_PER_DEVICE && !mine.hasChild(key)) return { changed: false }; }
+  let before = null;
+  await db.ref(`radioFavDev/${device}/${key}`).transaction(current => { before = current; return on ? 1 : null; });
+  const changed = Boolean(before) !== Boolean(on);
+  if (changed) await db.ref(`meta/radioFav/${key}`).transaction(current => { const next = Math.max(0, (Number(current) || 0) + (on ? 1 : -1)); return next || null; });
+  return { changed };
+}
+
 async function getLeaderboard({ strict = false } = {}) {
   try {
     initFirebase();
@@ -219,6 +248,10 @@ module.exports = {
   clearRadioReport,
   getRadioHidden,
   setRadioHidden,
+  getRadioMoves,
+  setRadioMove,
+  getRadioFavCounts,
+  setRadioFav,
   getRtpSettings,
   saveRtpSettings
 };

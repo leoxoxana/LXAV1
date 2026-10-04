@@ -25,14 +25,18 @@ const BUILD_BUDGET_MS = 26000;               // the function may run 30 s (verce
 
 // not = stations that are about something else (news, talk, religion) never enter a music category
 const CATEGORIES = [
-  { id: 'manele', emoji: '🔥', label: 'MANELE', limits: { direct: 120, twins: 80, max: 120 }, pin: /trapanel|\btrap\b|t[e]?hno|techno|\belectro|\bhouse\b|minimal|\bclub\b|hip[ -]?hop|\bdj\b|remix|manele noi|manele vechi/i, re: /manele|manea|trapanel|petrecere|lautaresc|lăutăresc|taraf|folclor|folcloric|muzic[aă] popular[aă]/i, queries: ['manele', 'petrecere', 'trapanele', 'lautareasca'], foreign: [] },
+  { id: 'manele', emoji: '🔥', label: 'MANELE', limits: { direct: 120, twins: 80, max: 120 }, pin: /trapanel|\btrap\b|t[e]?hno|techno|\belectro|\bhouse\b|minimal|\bclub\b|hip[ -]?hop|\bdj\b|remix|manele noi|manele vechi/i, re: /manele|manea|trapanel|petrecere|lautaresc|lăutăresc|taraf|folclor|folcloric|muzic[aă] popular[aă]|\betno\b|popular[aă]|\bfolk\b/i, queries: ['manele', 'petrecere', 'trapanele', 'lautareasca', 'folclor', 'populara', 'etno'], foreign: [] },
+  // ETNO is derived: the stations of the MANELE pipeline that are not manele (folk / popular / ethno / party-only "populara"), see buildList. TOP (the players' favourites) is added when the list is served.
+  { id: 'etno', emoji: '🎻', label: 'ETNO', derived: true },
   { id: 'rap', emoji: '🎤', label: 'RAP', re: /\brap\b|hip[ -]?hop|\btrap\b|urban|\br&b\b/i, queries: ['rap', 'hip hop', 'trap'], foreign: ['hip hop', 'rap'] },
   { id: 'house', emoji: '🪩', label: 'HOUSE', re: /\bhouse\b|deep house|progressive house/i, not: /tech[ -]?house/i, queries: ['house', 'deep house'], foreign: ['house', 'deep house'] },
   { id: 'techno', emoji: '⚡', label: 'TECHNO', re: /techno|minimal|tech[ -]?house|trance|\belectronic\b/i, queries: ['techno', 'minimal', 'trance', 'electronic'], foreign: ['techno', 'minimal'] },
   { id: 'dance', emoji: '🎉', label: 'DANCE', re: /\bdance\b|\bedm\b|\belectro\b|\bclub\b|eurodance/i, queries: ['dance', 'edm', 'club'], foreign: ['dance', 'edm'] },
   { id: 'pop', emoji: '🎵', label: 'POP', re: /\bpop\b|top ?40|top hits|\bhits\b|mainstream|\bcharts?\b/i, queries: ['pop', 'top 40', 'hits'], foreign: ['pop', 'top 40'] },
   { id: 'rock', emoji: '🎸', label: 'ROCK', re: /rock|alternative|\bmetal\b|punk|grunge/i, queries: ['rock', 'alternative', 'metal'], foreign: ['rock', 'classic rock'] },
-  { id: 'chill', emoji: '🌴', label: 'CHILL', re: /chill|lounge|ambient|relax|downtempo|\bjazz\b|easy listening/i, queries: ['chillout', 'lounge', 'ambient', 'relax', 'jazz'], foreign: ['chillout', 'lounge'] }
+  { id: 'chill', emoji: '🌴', label: 'CHILL', re: /chill|lounge|ambient|relax|downtempo|\bjazz\b|easy listening/i, queries: ['chillout', 'lounge', 'ambient', 'relax', 'jazz'], foreign: ['chillout', 'lounge'] },
+  // the most listened music that was missing: 80s / 90s / oldies / classic hits (manele "vechi" and folk are not retro)
+  { id: 'retro', emoji: '🕰', label: 'RETRO', re: /\b(70|80|90)'?s\b|oldies|retro|\bdisco\b|classic hits|\bgolden\b|nostalg|anii (70|80|90)/i, not: /manele|manea|trapanel|petrecere|folclor|popular/i, queries: ['oldies', '80s', '90s', '70s', 'retro', 'classic hits', 'disco'], foreign: ['oldies', '80s', '90s'] }
 ];
 const NOT_MUSIC = /\bnews\b|\btalk\b|religio|cre[sș]tin|christian|gospel|\bsport|podcast|stiri|știri|biseric/i;
 
@@ -93,7 +97,7 @@ function categoryScore(category, station) {
 // a station that says manele (tag or name) is always listed in MANELE, whatever else it is tagged (dance, house, club, ...), plus its best other category
 const explicitManele = station => /manele|manea|trapanel/i.test(station.tags || '') || /manele|manea|trapanel/i.test(station.name || '');
 const topCategories = station => explicitManele(station) && inCategory(CATEGORIES[0], station) ? ['manele', ...topCategoriesBase(station).filter(id => id !== 'manele').slice(0, 1)] : topCategoriesBase(station);
-const topCategoriesBase = station => CATEGORIES.map(category => ({ id: category.id, points: categoryScore(category, station) })).filter(item => item.points > 0).sort((a, b) => b.points - a.points).filter((item, index) => index === 0 || (index === 1 && item.points >= 2)).map(item => item.id);
+const topCategoriesBase = station => CATEGORIES.filter(category => !category.derived).map(category => ({ id: category.id, points: categoryScore(category, station) })).filter(item => item.points > 0).sort((a, b) => b.points - a.points).filter((item, index) => index === 0 || (index === 1 && item.points >= 2)).map(item => item.id);
 
 // real reachability: the stream must answer 2xx with audio bytes (not an HTML error page, not HLS) - and it has to do so for TWO kinds of client:
 // this server (plain request) and a phone (iPhone Safari headers: Range, icy-metadata). Some hosts answer a phone with an HTML page or nothing while a plain request works (found on the live list:
@@ -140,13 +144,18 @@ async function defaultFetchRo(category) {
   const lists = await Promise.all([...category.queries.map(tag => radioBrowser(`${base}&countrycode=RO&limit=300&tag=${encodeURIComponent(tag)}`).catch(() => []))]);
   return lists.flat();
 }
+// the most listened stations of the whole world: the best by recent clicks and the best by votes
+async function defaultFetchGlobal() {
+  const lists = await Promise.all(['clickcount', 'votes'].map(order => radioBrowser(`/json/stations/search?hidebroken=true&order=${order}&reverse=true&limit=300`).catch(() => [])));
+  return lists.flat();
+}
 async function defaultFetchRoAll() { return radioBrowser(`${base}&countrycode=RO&limit=1000`).catch(() => []); }
 async function defaultFetchForeign(category) {
   const lists = await Promise.all(category.foreign.map(tag => radioBrowser(`/json/stations/search?hidebroken=true&order=votes&reverse=true&limit=80&tagExact=true&tag=${encodeURIComponent(tag)}`).catch(() => [])));
   return lists.flat();
 }
 
-const MAX_FOLK = 5;   // folk / popular / ethno / party-only stations (tiers 3 and 4) are not manele: at most MAX_FOLK of them stay in MANELE, the last rows
+const ETNO_MAX = 60, GLOBAL_CANDIDATES = 160, GLOBAL_MAX = 40, GLOBAL_PER_COUNTRY = 4;   // folk / popular / ethno / party-only stations (tiers 3 and 4) are not manele: they go to ETNO
 const maneleTier = item => { const s = item.s || []; if (s.includes('trap')) return 0; if (s.includes('folk') || s.includes('etno')) return 4; if (s.includes('new')) return 1; return item.m ? 2 : 3; };
 const notManele = item => maneleTier(item) >= 3;
 const publicItem = (station, foreign, categoryId) => {
@@ -168,6 +177,7 @@ async function buildList(deps = {}) {
   };
   const picked = new Map();   // category id -> stations (raw), best first
   for (const category of CATEGORIES) {
+    if (category.derived) continue;
     const raw = [...(await fetchRo(category)).filter(s => String(s.countrycode || 'RO').toUpperCase() === 'RO'), ...roAll].filter(s => (usable(s) || upgradable(s)) && topCategories(s).includes(category.id));
     const unique = new Map(); for (const s of raw) { const key = s.stationuuid || streamKey(streamUrl(s)); if (!unique.has(key)) unique.set(key, s); }
     const ranked = [...unique.values()].sort((a, b) => score(b) - score(a));
@@ -178,15 +188,22 @@ async function buildList(deps = {}) {
     picked.set(category.id, [...chosen.values()].sort((a, b) => score(b) - score(a)));
   }
   // wanted (pinned) stations are probed FIRST, with the full timeout: they must not depend on how much of the time budget the bulk probing uses
+  // GLOBAL: the most listened music stations of the whole world (any country), probed together with the rest
+  const globalCandidates = [], seenGlobal = new Set();
+  try { for (const s of (await (deps.fetchGlobal || defaultFetchGlobal)()).filter(s => usable(s) && !NOT_MUSIC.test(textOf(s))).sort((a, b) => score(b) - score(a))) { const key = streamKey(streamUrl(s)); if (seenGlobal.has(key)) continue; seenGlobal.add(key); globalCandidates.push(s); if (globalCandidates.length >= GLOBAL_CANDIDATES) break; } } catch (error) { /* no global list this time: the rest of the build is not affected */ }
   const everything = [...picked.values()].flat();
   await probeMany(everything.filter(s => s.__pin));
-  await probeMany(everything);
+  await probeMany([...everything, ...globalCandidates]);
   // SECOND CHANCE: 20 probes at once can starve a slow but healthy stream (false negative, e.g. a TLS handshake that needs more than 3.5 s under load). The failures are tried again,
   // wanted (pinned) stations first, with the full timeout and only a few at a time. A station can only go from failed to working here, never the other way.
   const failed = [...new Map([...picked.values()].flat().filter(s => probed.get(streamUrl(s)) === false).map(s => [streamUrl(s), s])).values()].sort((a, b) => (b.__pin ? 1 : 0) - (a.__pin ? 1 : 0) || score(b) - score(a)).slice(0, SECOND_CHANCE_MAX);
   let again = 0; await Promise.all(Array.from({ length: 8 }, async () => { while (again < failed.length && !overBudget()) { const s = failed[again++]; if (await probe(streamUrl(s), PROBE_TIMEOUT_MS)) probed.set(streamUrl(s), true); } }));
-  const result = [];
+  const result = []; let etnoItems = [];
   for (const category of CATEGORIES) {
+    if (category.derived) {   // ETNO = what the MANELE pipeline found that is not manele (it comes right after MANELE in CATEGORIES)
+      etnoItems.slice(0, 3).forEach(item => { item.top = 1; });
+      result.push({ id: category.id, emoji: category.emoji, label: category.label, items: etnoItems }); continue;
+    }
     const items = [], localKeys = new Set();
     const add = (station, foreign) => { const url = streamUrl(station), key = streamKey(url), nk = nameKey(station.name); if (localKeys.has(key) || localKeys.has('n:' + nk)) return false; localKeys.add(key); localKeys.add('n:' + nk); items.push(publicItem(station, foreign, category.id)); return true; };
     for (const station of picked.get(category.id)) { if (items.length >= ((category.limits || {}).max || PER_CATEGORY_MAX)) break; if (probed.get(streamUrl(station)) === true) add(station, false); }
@@ -203,14 +220,23 @@ async function buildList(deps = {}) {
     // MANELE: the flame never goes to a folk / popular / ethno station (they are the last of the category, see below)
     items.filter(item => item.cc === 'RO' && !(category.id === 'manele' && notManele(item))).slice(0, 3).forEach(item => { item.top = 1; });
     if (category.id === 'manele') {
-      // owner's decision: folk / popular / ethno are not manele. Only the MAX_FOLK most listened of them stay, as the very last rows (quality order), plain: no flame, no style mark.
-      // All the room goes to the manele and their variants (trap / techno / electro / house / minimal / new / old), ordered by taste tier, then by quality (stable sort).
-      const real = items.filter(item => !notManele(item)).sort((a, b) => maneleTier(a) - maneleTier(b)), rest = items.filter(notManele).slice(0, MAX_FOLK);
-      rest.forEach(item => { delete item.s; delete item.top; });
-      items.length = 0; items.push(...real, ...rest);
+      // owner's decision: folk / popular / ethno are not manele, they have their own category (ETNO). MANELE keeps the manele and their variants (trap / techno / electro / house / minimal / new / old),
+      // ordered by taste tier, then by quality (stable sort); the others (quality order, plain rows: no style mark) go to ETNO.
+      const real = items.filter(item => !notManele(item)).sort((a, b) => maneleTier(a) - maneleTier(b));
+      etnoItems = items.filter(notManele).slice(0, ETNO_MAX); etnoItems.forEach(item => { delete item.s; delete item.top; delete item.m; });
+      items.length = 0; items.push(...real);
     }
     result.push({ id: category.id, emoji: category.emoji, label: category.label, items });
   }
+  // GLOBAL after the last category: the first GLOBAL_MAX candidates that really play (best score first)
+  // (at most GLOBAL_PER_COUNTRY per country: the raw ranking is dominated by a few big radio countries and would show eight stations of Lagos in a row)
+  const globalItems = [], globalKeys = new Set(), perCountry = new Map();
+  for (const station of globalCandidates) {
+    if (globalItems.length >= GLOBAL_MAX) break; const nk = nameKey(station.name), country = String(station.countrycode || '').toUpperCase();
+    if (probed.get(streamUrl(station)) !== true || globalKeys.has(nk) || (perCountry.get(country) || 0) >= GLOBAL_PER_COUNTRY) continue;
+    globalKeys.add(nk); perCountry.set(country, (perCountry.get(country) || 0) + 1); globalItems.push(publicItem(station, true, 'global'));
+  }
+  result.push({ id: 'global', emoji: '🌍', label: 'GLOBAL', items: globalItems });
   return { updatedAt: now(), cats: result };
 }
 
@@ -257,23 +283,56 @@ async function getList({ refresh = false, recheck = false, storage, build = buil
 
 const reply = (body, statusCode = 200, extra = {}) => ({ statusCode, headers: { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', ...extra }, body: JSON.stringify(body) });
 
-// The owner's hide list (admin panel > RADIO): applied when the list is SERVED, so hiding a station needs no rebuild and no deploy. Read from Firebase, kept 30 s in memory.
-let hiddenCache = null;
-async function hiddenKeys(storage, now = Date.now()) {
-  if (hiddenCache && now - hiddenCache.at < 30000) return hiddenCache.keys;
-  let keys = new Set(); try { if (storage && storage.getRadioHidden) keys = new Set(Object.keys((await storage.getRadioHidden()) || {})); } catch (error) { keys = hiddenCache ? hiddenCache.keys : keys; }
-  hiddenCache = { at: now, keys }; return keys;
+// SERVING STATE: what the owner decides in admin > RADIO (hide list, moves of a station to another category) and what the players decide (the ⭐ counters of the TOP category).
+// It is applied when the list is SERVED, so none of it needs a rebuild or a deploy. Read from Firebase, kept 30 s in memory (a failed read keeps the previous state).
+const MOVE_TARGETS = ['manele', 'etno', 'rap', 'house', 'techno', 'dance', 'pop', 'rock', 'chill', 'retro'];   // the categories a station can be moved to (TOP and GLOBAL are computed)
+const MIN_FAV_VOTES = 2, TOP_MAX = 40;                                                                           // a station is in TOP from 2 players, the 40 most starred
+let servingCache = null;
+async function servingState(storage, now = Date.now()) {
+  if (servingCache && now - servingCache.at < 30000) return servingCache.state;
+  const before = servingCache && servingCache.state;
+  const read = async (fn, old) => { try { return storage && storage[fn] ? ((await storage[fn]()) || {}) : {}; } catch (error) { return old || {}; } };
+  const raw = { hidden: await read('getRadioHidden', before && before.raw.hidden), moves: await read('getRadioMoves', before && before.raw.moves), favs: await read('getRadioFavCounts', before && before.raw.favs) };
+  const state = { raw, hidden: new Set(Object.keys(raw.hidden)), moves: new Map(Object.entries(raw.moves).filter(([, v]) => v && MOVE_TARGETS.includes(v.cat)).map(([k, v]) => [k, v.cat])), favs: new Map(Object.entries(raw.favs).map(([k, v]) => [k, Number(v) || 0])) };
+  servingCache = { at: now, state }; return state;
 }
-const servedList = (data, keys) => {
+const stripMarks = item => { const copy = { ...item }; delete copy.top; delete copy.s; delete copy.m; return copy; };
+const servedList = (data, given) => {
+  const state = given instanceof Set ? { hidden: given, moves: new Map(), favs: new Map() } : given;
   const rest = { ...data }; delete rest.dropped;   // `dropped` is for the admin, players do not need it
-  const shown = item => !blockedUrl(item.u) && !keys.has(reports.radioKey(item.u));   // blocked hosts also leave a list that was built before the block existed
-  return { ...rest, cats: rest.cats.map(cat => ({ ...cat, items: cat.items.filter(shown) })) };
+  const shown = item => !blockedUrl(item.u) && !state.hidden.has(reports.radioKey(item.u));   // blocked hosts also leave a list that was built before the block existed
+  let cats = rest.cats.map(cat => ({ ...cat, items: cat.items.filter(shown) }));
+  const moves = new Map([...state.moves].filter(([, target]) => cats.some(cat => cat.id === target)));   // a move to a category that does not exist (any more) changes nothing
+  if (moves.size) {   // a moved station leaves every category and goes to the TOP of its new one (without the flame: it is the owner's pick, not a ranking)
+    const first = new Map(); for (const cat of cats) for (const item of cat.items) { const key = reports.radioKey(item.u); if (!first.has(key)) first.set(key, item); }
+    cats = cats.map(cat => ({ ...cat, items: cat.items.filter(item => !moves.has(reports.radioKey(item.u))) }));
+    for (const [key, target] of [...moves].reverse()) { const item = first.get(key), cat = cats.find(c => c.id === target); if (item && cat) cat.items = [stripMarks(item), ...cat.items]; }
+  }
+  // TOP = the stations the players starred, most starred first (a station needs MIN_FAV_VOTES players); only stations that are in the list right now
+  const seen = new Map(); for (const cat of cats) for (const item of cat.items) if (!seen.has(item.u)) seen.set(item.u, item);
+  const top = [...seen.values()].map(item => ({ item, votes: state.favs.get(reports.radioKey(item.u)) || 0 })).filter(row => row.votes >= MIN_FAV_VOTES).sort((a, b) => b.votes - a.votes || a.item.n.localeCompare(b.item.n)).slice(0, TOP_MAX).map(row => stripMarks(row.item));
+  cats.push({ id: 'top', emoji: '⭐', label: 'TOP', items: top });
+  return { ...rest, cats };
 };
+// every station of the list once, with the categories it is in (admin > RADIO > stations)
+const stationIndex = data => { const map = new Map(); for (const cat of (data && data.cats) || []) for (const item of cat.items) { const key = reports.radioKey(item.u); const row = map.get(key) || { key, u: item.u, n: item.n, c: item.c, b: item.b, cc: item.cc, cats: [] }; row.cats.push(cat.id); map.set(key, row); } return map; };
 
 // POST {action:'report'}: a player says a station does not play (automatic after a failure, or the 🚩 button). Only stations of the current list are accepted, so the node count is bounded.
+// POST {action:'fav', u, on, dev}: a player stars / un-stars a station (the counters feed the TOP category). One vote per device and station, 60 stars per device, 60 changes per hour.
+async function handleFav(body, storage) {
+  const u = String(body.u || ''), dev = String(body.dev || '');
+  if (!/^https:\/\/[^\s]{4,400}$/i.test(u) || !/^[a-z0-9]{8,40}$/i.test(dev) || typeof body.on !== 'boolean') return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' });
+  const device = reports.deviceKey(dev);
+  if (!reports.allow('fav' + device, Date.now(), 60)) return reply({ error: 'Too many changes.' }, 429, { 'cache-control': 'no-store' });
+  if (!memory) memory = await loadStored(storage);
+  if (!stationIndex(memory).has(reports.radioKey(u))) return reply({ error: 'Unknown station.' }, 404, { 'cache-control': 'no-store' });
+  try { const result = await storage.setRadioFav(reports.radioKey(u), device, body.on); servingCache = null; return reply({ ok: true, changed: Boolean(result && result.changed) }, 200, { 'cache-control': 'no-store' }); }
+  catch (error) { return reply({ error: 'Not saved.' }, 503, { 'cache-control': 'no-store' }); }
+}
 async function handleReport(event, storage) {
   const raw = String(event.body || ''); if (raw.length > reports.MAX_BODY) return reply({ error: 'Too large.' }, 413, { 'cache-control': 'no-store' });
   let body; try { body = JSON.parse(raw || '{}'); } catch (error) { return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' }); }
+  if (body && body.action === 'fav') return handleFav(body, storage);
   const headers = event.headers || {}, report = body && body.action === 'report' ? reports.cleanReport(body, headers['user-agent'] || headers['User-Agent']) : null;
   if (!report) return reply({ error: 'Bad request.' }, 400, { 'cache-control': 'no-store' });
   if (!reports.allow(report.dev)) return reply({ error: 'Too many reports.' }, 429, { 'cache-control': 'no-store' });
@@ -292,11 +351,11 @@ exports.handler = async event => {
   try {
     const query = event.queryStringParameters || {};
     const { data, stale, rechecked } = await getList({ refresh: String(query.refresh || '') === '1', recheck: String(query.recheck || '') === '1', storage });
-    const keys = await hiddenKeys(storage);
-    return reply({ ...servedList(data, keys), stale }, 200, { 'cache-control': rechecked ? 'no-store' : stale ? 'public, s-maxage=60' : 'public, s-maxage=300, stale-while-revalidate=900' });
+    const state = await servingState(storage);
+    return reply({ ...servedList(data, state), stale }, 200, { 'cache-control': rechecked ? 'no-store' : stale ? 'public, s-maxage=60' : 'public, s-maxage=300, stale-while-revalidate=900' });
   } catch (error) {
     return reply({ error: 'Radio list temporarily unavailable.' }, 503, { 'cache-control': 'no-store' });
   }
 };
-exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.__resetHidden = () => { hiddenCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
+exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.stationIndex = stationIndex; exports.MOVE_TARGETS = MOVE_TARGETS; exports.__resetHidden = () => { servingCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
 exports.__resetMemory = () => { memory = null; building = null; };

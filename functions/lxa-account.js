@@ -564,15 +564,29 @@ const accountHandler = async event => {
       { const denied = await checkSafeWord(admin, input.safeWord); if (denied) return denied; }
       const store = require('./firebase-storage'), health = require('./radio-reports'), op = String(input.op || 'list'), key = String(input.key || '');
       if (op === 'list') {
-        const [reports, hidden, cache] = await Promise.all([store.getRadioReports(), store.getRadioHidden(), store.getRadioCache().catch(() => null)]);
+        const [reports, hidden, cache, moves] = await Promise.all([store.getRadioReports(), store.getRadioHidden(), store.getRadioCache().catch(() => null), store.getRadioMoves()]);
         const stations = cache && Array.isArray(cache.cats) ? new Set(cache.cats.flatMap(cat => cat.items.map(item => item.u))).size : 0;
-        return json({ ...health.summarize(reports, hidden), stations, updatedAt: number(cache && cache.updatedAt), checkedAt: number(cache && (cache.checkedAt || cache.updatedAt)), dropped: cache && Array.isArray(cache.dropped) ? cache.dropped.slice(0, 40).map(d => ({ n: String(d.n || ''), u: String(d.u || ''), at: number(d.at), key: health.radioKey(d.u) })) : [] });
+        const radio = require('./radio'), labels = new Map(((cache && cache.cats) || []).map(cat => [cat.id, cat])), categories = radio.MOVE_TARGETS.filter(id => labels.has(id)).map(id => ({ id, emoji: labels.get(id).emoji, label: labels.get(id).label }));
+        const summary = health.summarize(reports, hidden); summary.reports.forEach(row => { row.moved = (moves[row.key] && moves[row.key].cat) || ''; });
+        return json({ ...summary, categories, stations, updatedAt: number(cache && cache.updatedAt), checkedAt: number(cache && (cache.checkedAt || cache.updatedAt)), dropped: cache && Array.isArray(cache.dropped) ? cache.dropped.slice(0, 40).map(d => ({ n: String(d.n || ''), u: String(d.u || ''), at: number(d.at), key: health.radioKey(d.u) })) : [] });
+      }
+      if (op === 'stations') {   // every station of the list once, with the categories it is in, whether it is moved / hidden (the station manager)
+        const [cache, hidden, moves] = await Promise.all([store.getRadioCache().catch(() => null), store.getRadioHidden(), store.getRadioMoves()]);
+        const radio = require('./radio'), index = radio.stationIndex(cache), labels = new Map(((cache && cache.cats) || []).map(cat => [cat.id, cat]));
+        const stations = [...index.values()].map(row => ({ key: row.key, n: row.n, c: row.c, b: row.b, cc: row.cc, cats: row.cats, moved: (moves[row.key] && moves[row.key].cat) || '', hidden: Boolean(hidden[row.key]) })).sort((a, b) => a.n.localeCompare(b.n));
+        return json({ stations, categories: radio.MOVE_TARGETS.filter(id => labels.has(id)).map(id => ({ id, emoji: labels.get(id).emoji, label: labels.get(id).label })) });
       }
       if (!/^[0-9a-f]{16}$/.test(key)) return json({ error: 'Bad request.' }, 400);
+      if (op === 'unmove') { await store.setRadioMove(key, null); return json({ ok: true }); }
+      if (op === 'move') {
+        const radio = require('./radio'), cat = String(input.cat || ''); if (!radio.MOVE_TARGETS.includes(cat)) return json({ error: 'Bad request.' }, 400);
+        const row = radio.stationIndex(await store.getRadioCache().catch(() => null)).get(key); if (!row) return json({ error: 'Station not found.' }, 404);
+        await store.setRadioMove(key, { u: row.u, n: String(row.n || '').slice(0, 60), cat, at: Date.now() }); return json({ ok: true });
+      }
       const [reports, hidden] = await Promise.all([store.getRadioReports(), store.getRadioHidden()]), node = reports[key] || hidden[key] || null;
       if (op === 'unhide') { await store.setRadioHidden(key, null); return json({ ok: true }); }
       if (op === 'clear') { await store.clearRadioReport(key); return json({ ok: true }); }
-      const dropped = node ? null : (await store.getRadioCache().catch(() => null)), fromDropped = dropped && Array.isArray(dropped.dropped) ? dropped.dropped.find(d => health.radioKey(d.u) === key) : null, found = node || fromDropped;
+      const dropped = node ? null : (await store.getRadioCache().catch(() => null)), fromDropped = dropped && Array.isArray(dropped.dropped) ? dropped.dropped.find(d => health.radioKey(d.u) === key) : null, found = node || fromDropped || (dropped ? require('./radio').stationIndex(dropped).get(key) || null : null);   // any station of the list can be hidden, reported or not
       if (!found || !found.u) return json({ error: 'Station not found.' }, 404);
       if (op === 'hide') { await store.setRadioHidden(key, { u: String(found.u), n: String(found.n || '').slice(0, 60), at: Date.now() }); return json({ ok: true }); }
       if (op === 'test') return json({ test: await require('./radio').diagnose(String(found.u)) });

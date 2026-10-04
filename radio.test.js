@@ -42,7 +42,7 @@ describe('buildList', () => {
     expect(items(data, 'manele').map(i => i.n)).toEqual(['Manele Live']);
     expect(items(data, 'rock').map(i => i.n)).toEqual(['Rock One']);
     expect(items(data, 'rap')).toEqual([]);
-    expect(data.cats.map(c => c.id)).toEqual(['manele', 'rap', 'house', 'techno', 'dance', 'pop', 'rock', 'chill']);
+    expect(data.cats.map(c => c.id)).toEqual(['manele', 'etno', 'rap', 'house', 'techno', 'dance', 'pop', 'rock', 'chill', 'retro', 'global']);   // TOP (the players' stars) is added when the list is served
   });
   test('duplicates (same stream or same name) appear once per category; best-scored first', async () => {
     const a = st({ name: 'Kiss FM', tags: 'pop', clickcount: 5000 }), same = { ...a, stationuuid: 'other', name: 'Kiss FM (2)' }, nameTwin = st({ name: 'KISS  FM!', tags: 'pop', clickcount: 1 });
@@ -230,9 +230,11 @@ describe('styles of manele', () => {
     const data = await run([st({ name: 'Ade FM', tags: 'hip-hop,manele,rap,trap' }), st({ name: 'Radio Folclor', tags: 'folclor,folk,petrecere,populară' }), st({ name: 'Antena Satelor', tags: 'muzică populară,radio public' }), st({ name: 'Plain Manele', tags: 'manele,petrecere' })]);
     const byName = Object.fromEntries(manele(data).map(i => [i.n, i]));
     expect(byName['Ade FM'].s).toContain('trap');
-    expect(byName['Radio Folclor']).toBeDefined(); expect(byName['Antena Satelor']).toBeDefined();   // folk-only stations that work are still listed (at the bottom, max 5) ...
-    expect(byName['Radio Folclor'].s).toBeUndefined(); expect(byName['Antena Satelor'].s).toBeUndefined();   // ... as plain rows: not manele, so no style mark
     expect(byName['Plain Manele'].s).toBeUndefined();
+    expect(byName['Radio Folclor']).toBeUndefined(); expect(byName['Antena Satelor']).toBeUndefined();   // folk is not manele: it is in ETNO (plain rows, no style mark) ...
+    const etno = Object.fromEntries(data.cats.find(c => c.id === 'etno').items.map(i => [i.n, i]));
+    expect(etno['Radio Folclor']).toBeDefined(); expect(etno['Antena Satelor']).toBeDefined();
+    expect(etno['Radio Folclor'].s).toBeUndefined(); expect(etno['Antena Satelor'].s).toBeUndefined();
     expect(manele(data).some(i => i.h)).toBe(false);
   });
   test('TASTE ORDER: trap / techno first, new next, manele, party-only (no word manele), folk and ethno LAST; nothing removed; the quality order is kept inside a tier', async () => {
@@ -243,7 +245,8 @@ describe('styles of manele', () => {
       st({ name: 'Trap G', tags: 'manele,trap', clickcount: 100 }), st({ name: 'Club H', tags: 'manele,club', clickcount: 50 }),
       st({ name: 'Club Etno I', tags: 'manele,club,etno', clickcount: 10 }), st({ name: 'Party Z', tags: 'petrecere,populară', clickcount: 3000 })
     ]);
-    expect(manele(data).map(i => i.n)).toEqual(['Trap G', 'Club H', 'Club Etno I', 'New E', 'Plain C', 'Plain D', 'Old F', 'Folk A', 'Etno B', 'Party Z']);   // the last three are not manele (folk / ethno / party-only): by quality
+    expect(manele(data).map(i => i.n)).toEqual(['Trap G', 'Club H', 'Club Etno I', 'New E', 'Plain C', 'Plain D', 'Old F']);
+    expect(data.cats.find(c => c.id === 'etno').items.map(i => i.n)).toEqual(['Folk A', 'Etno B', 'Party Z']);   // folk / ethno / party-only are not manele: ETNO, by quality
   });
   test('the 🔥 top flag marks the three best by quality, not the first three after the taste order', async () => {
     const data = await run([st({ name: 'Plain Big', tags: 'manele', clickcount: 9000 }), st({ name: 'Plain Mid', tags: 'manele', clickcount: 8000 }), st({ name: 'Plain Two', tags: 'manele', clickcount: 7000 }), st({ name: 'Plain Four', tags: 'manele', clickcount: 6000 }), st({ name: 'Trap Tiny', tags: 'manele,trap', clickcount: 1 })]);
@@ -251,25 +254,29 @@ describe('styles of manele', () => {
     expect(list[0].n).toBe('Trap Tiny');                                 // first by taste ...
     expect(list.filter(i => i.top).map(i => i.n).sort()).toEqual(['Plain Big', 'Plain Mid', 'Plain Two']);   // ... but not "top"
   });
-  test('at most the 5 most listened folk / popular / ethno stations stay in MANELE, as the LAST rows, without flame or style mark; every other station of the category stays', async () => {
+  const etnoOf = data => data.cats.find(c => c.id === 'etno').items;
+  test('ETNO holds the folk / popular / ethno / party-only stations, most listened first, as plain rows (no style mark); MANELE has none of them', async () => {
     const folk = ['A', 'B', 'C', 'D', 'E', 'F'].map((k, i) => st({ name: 'Folclor ' + k, tags: 'folclor,petrecere,manele vechi', clickcount: 5000 - i * 100 }));   // A is the most listened
-    const etno = st({ name: 'Etno Only', tags: 'etno,manele', clickcount: 100 });                                                            // the 7th of the kind
+    const etno = st({ name: 'Etno Only', tags: 'etno,manele', clickcount: 100 });
     const plain = ['P1', 'P2', 'P3'].map((k, i) => st({ name: 'Manele ' + k, tags: 'manele', clickcount: 10 + i }));
     const data = await run([...folk, etno, ...plain]);
-    expect(manele(data).map(i => i.n)).toEqual(['Manele P3', 'Manele P2', 'Manele P1', 'Folclor A', 'Folclor B', 'Folclor C', 'Folclor D', 'Folclor E']);
-    for (const row of manele(data).filter(i => /^Folclor/.test(i.n))) { expect(row.top).toBeUndefined(); expect(row.s).toBeUndefined(); }   // plain rows: no flame, no style mark (even for a folk station that is also tagged old)
+    expect(manele(data).map(i => i.n)).toEqual(['Manele P3', 'Manele P2', 'Manele P1']);
+    expect(etnoOf(data).map(i => i.n)).toEqual(['Folclor A', 'Folclor B', 'Folclor C', 'Folclor D', 'Folclor E', 'Folclor F', 'Etno Only']);   // nothing is cut: ETNO is a category of its own
+    for (const row of etnoOf(data)) { expect(row.s).toBeUndefined(); expect(row.m).toBeUndefined(); }   // no style mark, even for a folk station that is also tagged "vechi"
   });
-  test('the cap counts the not-manele kind (folk / ethno / party-only "populara" without the word manele); a trap station with an ethno tag and plain manele are never dropped', async () => {
-    const folk = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((k, i) => st({ name: 'Folclor ' + k, tags: 'folclor', clickcount: 900 - i }));
-    const keep = [st({ name: 'Club Etno', tags: 'manele,club,etno', clickcount: 1 }), st({ name: 'Party Only', tags: 'petrecere,populară', clickcount: 5000 }), st({ name: 'Plain Manele', tags: 'manele', clickcount: 1 })];
-    const names = manele(await run([...folk, ...keep])).map(i => i.n);
-    expect(names.slice(0, 2).sort()).toEqual(['Club Etno', 'Plain Manele']);
-    expect(names.slice(-5)).toEqual(['Party Only', 'Folclor A', 'Folclor B', 'Folclor C', 'Folclor D']);   // the party-only "populara" station is one of the 5 most listened of the kind
-    expect(names).toHaveLength(7);
+  test('a trap station that also carries an ethno tag stays in MANELE (trap wins); party-only "populara" without the word manele goes to ETNO', async () => {
+    const data = await run([st({ name: 'Club Etno', tags: 'manele,club,etno' }), st({ name: 'Party Only', tags: 'petrecere,populară' }), st({ name: 'Plain Manele', tags: 'manele' })]);
+    expect(manele(data).map(i => i.n).sort()).toEqual(['Club Etno', 'Plain Manele']);
+    expect(etnoOf(data).map(i => i.n)).toEqual(['Party Only']);
   });
-  test('the 🔥 never goes to a folk / popular / ethno station, however listened: it goes to the best manele instead', async () => {
+  test('the 🔥 of MANELE goes to the best manele (never to a folk station, however listened); ETNO has its own three', async () => {
     const data = await run([st({ name: 'Folclor Big', tags: 'folclor', clickcount: 90000 }), st({ name: 'Etno Big', tags: 'etno,manele', clickcount: 80000 }), st({ name: 'Plain 1', tags: 'manele', clickcount: 300 }), st({ name: 'Plain 2', tags: 'manele', clickcount: 200 }), st({ name: 'Plain 3', tags: 'manele', clickcount: 100 }), st({ name: 'Plain 4', tags: 'manele', clickcount: 50 })]);
     expect(manele(data).filter(i => i.top).map(i => i.n).sort()).toEqual(['Plain 1', 'Plain 2', 'Plain 3']);
+    expect(etnoOf(data).map(i => i.n)).toEqual(['Folclor Big', 'Etno Big']); expect(etnoOf(data).every(i => i.top)).toBe(true);
+  });
+  test('ETNO keeps at most 60 stations', async () => {
+    const data = await run(Array.from({ length: 70 }, (_, i) => st({ name: 'Folclor ' + i, tags: 'folclor', clickcount: 9000 - i })));
+    expect(etnoOf(data)).toHaveLength(60);
   });
   test('style codes exist only in MANELE: the same station in another category carries none', async () => {
     const data = await run([st({ name: 'Club Pop', tags: 'club,pop' })]);
@@ -293,7 +300,8 @@ describe('MANELE keeps every working manele station', () => {
   test('explicit manele (word in tags or name) is flagged m; a party-only station is not', async () => {
     const data = await run([st({ name: 'Real Manele', tags: 'manele' }), st({ name: 'Party Only', tags: 'petrecere,populară' })]);
     const by = Object.fromEntries(data.cats.find(c => c.id === 'manele').items.map(i => [i.n, i]));
-    expect(by['Real Manele'].m).toBe(1); expect(by['Party Only'].m).toBeUndefined();
+    expect(by['Real Manele'].m).toBe(1); expect(by['Party Only']).toBeUndefined();   // party-only is not manele: it is in ETNO
+    expect(data.cats.find(c => c.id === 'etno').items.map(i => i.n)).toEqual(['Party Only']);
   });
   test('electro / house / minimal / techno manele count as the trap tier', () => {
     for (const tags of ['manele,electro', 'manele,house', 'manele,minimal', 'manele,techno', 'manele,tehno']) expect(radio.styleOf(st({ tags }))).toContain('trap');
