@@ -1,0 +1,1 @@
+﻿v57 (2026-10-04, commit 695365b): lock + zoom fix, admin radio emoji-only chips, rank line while spinning, no stuck hover. renderer v=426, layout-fix v=495, radio.js v=11, admin-radio.js v=3. Previous: v56.

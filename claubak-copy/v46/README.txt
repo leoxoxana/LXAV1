@@ -1,0 +1,1 @@
+﻿v46 (2026-10-04, commits 4cc3c0a server, d7062f7 client): radio v2 (skip, favorites, recent, random, sleep, eco, reconnect, dead-station memory), best-two categories, functions in fra1. radio.js v=3, layout-fix v=483. Previous: v45.

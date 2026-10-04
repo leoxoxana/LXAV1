@@ -1,0 +1,1 @@
+﻿v29 (2026-10-03, commit afbb303): header slide as a pure function of the flag position (SLIDE_AT 0.65, SLIDE_HYST 4), 0.45 s in / 0.18 s back. layout-fix v=459. Previous: v28 (direction-based), v26 (overlap-free).

@@ -1,0 +1,1 @@
+﻿v56 (2026-10-04, commits 054be5e zoom + 07692da categories): iOS zoom fix, 12 radio categories, admin station manager. radio.js v=10, admin-radio.js v=1, renderer v=424, layout-fix v=493, header-fit v=2. Previous: v54.

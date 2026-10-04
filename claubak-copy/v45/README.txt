@@ -1,0 +1,1 @@
+﻿v45 (2026-10-04, commits 1c768c2 server, 99c2ef9 client): radio player above the Ko-fi goal bar (Radio Browser, probed, cached), version-notice false alarm fixed. renderer v=416, layout-fix v=481, radio.js v=1. Previous: v44.

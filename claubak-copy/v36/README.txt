@@ -1,0 +1,1 @@
+﻿v36 (2026-10-03, commit 2a61078): adaptive header, banner glow centred on the logo, mission columns = prize columns, in-app confirm dialog, leaderboard rank fix. layout-fix v=473, renderer v=410. Previous: v35.
