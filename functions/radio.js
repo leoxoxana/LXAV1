@@ -326,6 +326,11 @@ async function buildList(deps = {}) {
   for (const row of globalOrder) { if (chosenRows.size >= GLOBAL_MAX) break; if (!chosenRows.has(row) && !row.s.__langFree && fits(row)) take(row); }   // pass 2: the places a family could not fill go to the best of the rest
   const globalItems = globalOrder.filter(row => chosenRows.has(row)).map(({ s: station }) => { const item = publicItem(station, true, 'global'); item.n = item.n.replace(/^[^\p{L}\p{N}]+/u, '') || item.n; return item; });   // listed by popularity again (names like "# TOP 100 ..." lose the symbols in front)
   result.push({ id: 'global', emoji: '🌍', label: 'GLOBAL', items: globalItems });
+  // ONE category per station: the same stream (or the same name) is listed once in the whole list, in the category where it fits best (MANELE for explicit manele, then ETNO, then the best tag score; GLOBAL last)
+  const fit = (cat, item) => { const rec = stationOf.get(item); if (cat.id === 'global') return 0; if (!rec) return cat.id === 'etno' ? 50 : 1; if (cat.id === 'manele' && explicitManele(rec)) return 100; const def = CATEGORIES.find(c => c.id === cat.id); return def && !def.derived ? categoryScore(def, rec) + (cat.id === 'retro' ? 3 : 0) : 1; };   // (an 80s / 90s / oldies station is first of all retro)
+  const owner = new Map();
+  result.forEach((cat, index) => cat.items.forEach(item => { for (const key of [streamKey(item.u), 'n:' + nameKey(item.n)]) { const held = owner.get(key), score = fit(cat, item); if (!held || score > held.score) owner.set(key, { index, score }); } }));
+  result.forEach((cat, index) => { cat.items = cat.items.filter(item => owner.get(streamKey(item.u)).index === index && owner.get('n:' + nameKey(item.n)).index === index); });
   return { updatedAt: now(), cats: result };
 }
 

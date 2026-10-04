@@ -642,3 +642,13 @@ describe('player submission → admin → public: the server validates, saves au
     });
   });
 });
+
+describe('one category per station', () => {
+  test('the same stream is listed once in the whole list, in the category where it fits best', async () => {
+    const mk = (name, tags, n) => ({ stationuuid: 'u' + n, name, url_resolved: 'https://d' + n + '.example.ro/live', codec: 'MP3', bitrate: 128, lastcheckok: 1, hls: 0, ssl_error: 0, countrycode: 'RO', tags, clickcount: 100, votes: 10 });
+    const data = await radio.buildList({ fetchRo: async () => [mk('Multi', 'house,techno,dance,pop', 1), mk('Only Pop', 'pop', 2), mk('Manele Dance', 'manele,dance', 3)], fetchRoAll: async () => [], fetchForeign: async () => [], fetchGlobal: async () => [], probe: async () => true, now: Date.now });
+    const seen = new Map(); for (const cat of data.cats) for (const i of cat.items) seen.set(i.u, (seen.get(i.u) || 0) + 1);
+    expect(Math.max(...seen.values())).toBe(1);
+    expect(data.cats.find(c => c.id === 'manele').items.map(i => i.n)).toContain('Manele Dance');
+  });
+});
