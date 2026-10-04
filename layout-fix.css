@@ -5998,7 +5998,7 @@ html body:not(#_):not(#__):not(#___):not(#____) #chanceValue[data-level="2"]{col
 html body:not(#_):not(#__):not(#___):not(#____) .money-actions #reset b{font-size:12px!important;letter-spacing:1px!important}
 /* status line over the reels (1/Leo · RUNDA · POZIȚIA · difficulty): one colour each; the difficulty word has the colour of its emoji */
 html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-id,html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-guest{color:#bfe3ff!important;text-shadow:0 0 8px rgba(110,190,255,.7),0 1px 0 rgba(0,0,0,.6)!important}
-html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-round{color:#d6c4ff!important;text-shadow:0 0 8px rgba(170,130,255,.7),0 1px 0 rgba(0,0,0,.6)!important}
+html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-lvl{color:#d6c4ff!important;text-shadow:0 0 8px rgba(170,130,255,.7),0 1px 0 rgba(0,0,0,.6)!important}
 html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-rank{color:#ff9bea!important;text-shadow:0 0 8px rgba(255,90,220,.7),0 1px 0 rgba(0,0,0,.6)!important}
 html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-diff[data-level="0"]{color:#ffbf3a!important;text-shadow:0 0 8px rgba(255,191,58,.7),0 1px 0 rgba(0,0,0,.6)!important}
 html body:not(#_):not(#__):not(#___):not(#____) .console-top .status-diff[data-level="1"]{color:#ff4b3e!important;text-shadow:0 0 8px rgba(255,75,62,.7),0 1px 0 rgba(0,0,0,.6)!important}
