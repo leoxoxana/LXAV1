@@ -134,6 +134,7 @@
   //   in   when the flag's bottom has risen to SLIDE_AT x its own height below the lock's top  (0.65 = the flag still overlaps the lock's top part;
   //        the lock is drawn above the flag)
   //   back when it comes down again past that point + SLIDE_HYST px (hysteresis, so jitter around the point cannot flip it)
+  function pinchZoomed(){ var v=window.visualViewport; return !!v&&v.scale>1.02; }
   var SLIDE_AT=0.65, SLIDE_HYST=4, SLIDE_LATER=5;   // SLIDE_LATER: slide 5px of scroll later (less overlap with the lock)
   var slid=false, rowShift=0, lockRestOff=0;   // lockRestOff: the lock's top minus the ID button's top while the lock sits in the grid
   function updateLockKofiFloatInner(){
@@ -242,6 +243,7 @@
   }
   // A thrown error must never leave the header half aligned: it is caught, remembered (window.__lxaHeaderError) and shown in the ?debug=1 overlay
   function updateLockKofiFloat(){
+    if(pinchZoomed()) return;   // zoomed in: the rectangles and the scroll offset disagree on iOS, the header stays exactly as it was and is re-aligned when the zoom is back at 1
     try{ updateLockKofiFloatInner(); }
     catch(e){ window.__lxaHeaderError=String((e&&e.message)||e); try{ window.LXASpinButton&&LXASpinButton.trace&&LXASpinButton.trace('header error: '+window.__lxaHeaderError); }catch(_){} }
   }
@@ -252,13 +254,16 @@
     (function frame(){ updateLockKofiFloat(); if((window.performance?performance.now():Date.now())<end&&window.requestAnimationFrame) requestAnimationFrame(frame); })();
   }
   function onHeaderResize(){
+    if(pinchZoomed()) return;
     flushHeaderCluster();
     fitHeaderTagline();
     updateLockKofiFloat();
   }
   window.addEventListener('load',function(){ onHeaderResize(); headerBurst(1500); });
   window.addEventListener('pageshow',function(){ onHeaderResize(); headerBurst(800); });
-  if(window.visualViewport) window.visualViewport.addEventListener('resize',function(){ headerBurst(500); });
+  // pinch zoom (visualViewport.scale > 1): nothing is re-measured while zoomed; the moment the zoom is back at 1 the whole header is aligned again
+  var wasZoomed=false;
+  if(window.visualViewport) window.visualViewport.addEventListener('resize',function(){ if(pinchZoomed()){ wasZoomed=true; return; } if(wasZoomed){ wasZoomed=false; onHeaderResize(); headerBurst(900); return; } headerBurst(500); });
   // the card edge and the header settle after load (fonts, scrollbar, layout): re-align the icon row whenever they change size
   if(document.fonts&&document.fonts.ready) document.fonts.ready.then(onHeaderResize);
   setTimeout(onHeaderResize,500); setTimeout(onHeaderResize,1500);

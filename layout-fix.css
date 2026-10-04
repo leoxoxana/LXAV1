@@ -5877,3 +5877,17 @@ html body:not(#_):not(#__):not(#___):not(#____) .radio-report.is-hidden .player-
 html body:not(#_):not(#__):not(#___):not(#____) .radio-report.is-hidden .player-row-info .radio-hidden-tag{opacity:1!important}
 html body:not(#_):not(#__):not(#___):not(#____) .player-row-actions button.radio-textbtn{width:auto!important;padding:0 8px!important;font:700 10px Consolas,monospace!important;white-space:nowrap!important}
 html body:not(#_):not(#__):not(#___):not(#____) .player-row-actions button.radio-show{border-color:var(--lxa-cyan-400)!important;color:var(--lxa-cyan-400)!important}
+
+/* ===== Touch devices: the page never zooms by itself ===== */
+/* iOS Safari zooms the whole page when a text field / select with a font below 16px gets the focus and does NOT zoom back: the site stays enlarged and off-centre. 32 of 66 fields were below 16px. */
+@media (hover:none),(pointer:coarse){
+  html body:not(#_):not(#__):not(#___):not(#____) input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]):not([type=file]),
+  html body:not(#_):not(#__):not(#___):not(#____) select,
+  html body:not(#_):not(#__):not(#___):not(#____) textarea{font-size:16px!important}
+  html body:not(#_):not(#__):not(#___):not(#____) .radio-search{height:34px!important}
+  html body:not(#_):not(#__):not(#___):not(#____) .radio-tool select{height:32px!important;font-size:16px!important}
+}
+/* no double-tap zoom anywhere (pinch zoom stays available) */
+html{touch-action:manipulation}
+/* scrolling inside a list / panel never drags the page behind it */
+html body:not(#_):not(#__):not(#___):not(#____) .radio-list,html body:not(#_):not(#__):not(#___):not(#____) .account-panel-card{overscroll-behavior:contain!important}
