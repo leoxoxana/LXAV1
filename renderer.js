@@ -783,6 +783,8 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
     // .board-total for layout + .board-bonus.mission-bonus for the existing
     // gold color scheme, so no new CSS is needed for these.
     const jackpot = spin.jackpotPayout ? `<span class="board-total board-bonus mission-bonus"><span>JACKPOT</span><b>+${euro(spin.jackpotPayout)}</b></span>` : '';
+    // progress chip (1/5 .. 4/5): shown when this spin won a jackpot line but the mission is not complete yet (at 5/5 the "mission done" chip below takes its place)
+    const progress = spin.jackpotPayout && !spin.jackpotCycleCompleted && spin.jackpotProgressAfter > 0 ? `<span class="board-total board-bonus mission-bonus"><span>${({de:'MISSION',ro:'MISIUNE',en:'MISSION'}[lang] || 'MISSION')}</span><b>${spin.jackpotProgressAfter}/5</b></span>` : '';
     const reset = spin.jackpotCycleCompleted ? `<span class="board-total board-bonus mission-bonus"><span>${T118('missionDone')}</span><b>5/5</b></span>` : '';
     const wildLineSet = new Set((spin.wild?.positions || []).map(position => position.line));
     const winningLines = spin.finalResults.map((hits, index) => ({ hits, index, amount: spin.linePayouts[index], wild: wildLineSet.has(index) })).filter(line => line.amount > 0);
@@ -809,7 +811,7 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
       $('#boardDetails').innerHTML = winningLines.map(line => `<div class="${line.hits === 10 && !line.wild ? 'jackpot-result' : ''}"><span>L${line.index + 1} · ${line.hits}/10</span><b>+${euro(line.amount)}</b></div>`).join('');
       // totalHtml (BRUTTO + NETTO) stays first in the summary; the colours are tied to .net-result / .gross-result (layout-fix.css),
       // so the jackpot / reset blocks after it can never steal them.
-      $('#boardSummary').innerHTML = totalHtml + jackpot + reset;
+      $('#boardSummary').innerHTML = totalHtml + jackpot + progress + reset;
     }
     $('#winBoard').classList.add('show');
     fitWinBoardRow();
