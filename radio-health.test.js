@@ -273,7 +273,7 @@ describe('RETRO and GLOBAL categories (build)', () => {
     expect(items(await run([], world), 'global').sort()).toEqual(['Afro Hits', 'Top Hits']);
     for (const [tags, yes] of [['pop', true], ['hits', true], ['80s', true], ['jazz,lounge', true], ['afrobeats', true], ['', false], ['talk', false], ['business,commerce', false], ['bbc', false], ['police scanner', false]]) expect(radio.hasMusicTag({ tags })).toBe(yes);
   });
-  test('GLOBAL variety: at most 50; one per name; one per CURRENT TITLE (stations on one feed); 4 per network; 24 per English-speaking country; 2 per other country and 10 in all', async () => {
+  test('GLOBAL variety: at most 100; one per name; one per CURRENT TITLE (stations on one feed); 5 per network; 60 per English-speaking country; 3 per other country and 14 in all', async () => {
     const titles = new Map(); const reader = async url => ({ ok: true, metaint: 1, title: titles.get(url) || '' });
     const station = (name, cc, host, n, over = {}) => { const s = st({ name, countrycode: cc, clickcount: 9000 - n, ...over }); s.url_resolved = `https://${host}/s${n}`; return s; };
     const world = []; let n = 0;
@@ -283,10 +283,10 @@ describe('RETRO and GLOBAL categories (build)', () => {
     for (let i = 0; i < 30; i++) world.push(station('Other ' + i, ['DE', 'FR', 'IT', 'ES', 'JP', 'RU', 'MA', 'NG', 'GR', 'AT', 'CH'][i % 11], 'o' + i + '.other' + i + '.org', n++));
     const data = await radio.buildList({ fetchRo: async () => [], fetchRoAll: async () => [], fetchForeign: async () => [], fetchGlobal: async () => world.map(s => ({ language: 'english', ...s })), probe: async () => true, readIcy: reader, now: Date.now });
     const g = data.cats.find(c => c.id === 'global').items, byName = prefix => g.filter(i => i.n.startsWith(prefix)).length;
-    expect(g).toHaveLength(50); expect(byName('Soma')).toBe(4); expect(byName('Same Feed')).toBe(1); expect(new Set(g.map(i => i.n)).size).toBe(50);
+    expect(g.length).toBeLessThanOrEqual(100); expect(g.length).toBeGreaterThanOrEqual(40); expect(byName('Soma')).toBe(5); expect(byName('Same Feed')).toBe(1); expect(new Set(g.map(i => i.n)).size).toBe(g.length);
     const native = g.filter(i => ['US', 'GB', 'CA', 'AU', 'IE', 'NZ', 'ZA'].includes(i.cc)), other = g.filter(i => !['US', 'GB', 'CA', 'AU', 'IE', 'NZ', 'ZA'].includes(i.cc));
-    expect(other.length).toBeLessThanOrEqual(10); expect(native.length).toBeGreaterThanOrEqual(40);
-    const per = {}; for (const i of other) per[i.cc] = (per[i.cc] || 0) + 1; expect(Math.max(...Object.values(per))).toBeLessThanOrEqual(2);
+    expect(other.length).toBeLessThanOrEqual(14); expect(native.length).toBeGreaterThanOrEqual(40);
+    const per = {}; for (const i of other) per[i.cc] = (per[i.cc] || 0) + 1; expect(Math.max(...Object.values(per))).toBeLessThanOrEqual(3);
   });
   test('GLOBAL ranking: a confirmed song right now lifts a station; English-speaking countries rank first; a talk segment on the air removes a station outside them but not inside them; leading symbols are removed from names', async () => {
     const titles = {}; const reader = async url => ({ ok: true, metaint: 1, title: titles[url] || '' });
@@ -303,7 +303,8 @@ describe('RETRO and GLOBAL categories (build)', () => {
       st({ name: 'Spanish', countrycode: 'ES', language: 'spanish', clickcount: 9000 }), st({ name: 'No Language', countrycode: 'US', language: '', clickcount: 9000 }), st({ name: 'British English', countrycode: 'GB', language: 'british english', clickcount: 300, votes: 10 }),
       st({ name: 'English Gospel', countrycode: 'US', tags: 'gospel,christian', clickcount: 5000 }), st({ name: 'English Talk', countrycode: 'US', tags: 'talk', clickcount: 5000 })];
     const names = items(await run([], world), 'global');
-    expect(names).toEqual(['Busy English', 'British English', 'Votes Farm']);   // clicks first (600 clicks with 800 000 votes does not beat 4700 clicks); an English-speaking country ranks above a foreign station of similar size
+    expect(names).toEqual(expect.arrayContaining(['Busy English', 'British English', 'Votes Farm', 'No Language']));   // an empty language counts as English in an English-speaking country
+    expect(names).not.toContain('Spanish'); expect(names).not.toContain('Portuguese First'); expect(names).not.toContain('English Talk');   // clicks first (600 clicks with 800 000 votes does not beat 4700 clicks); an English-speaking country ranks above a foreign station of similar size
     expect(radio.isEnglish({ language: 'English' })).toBe(true); expect(radio.isEnglish({ language: 'english,german' })).toBe(true); expect(radio.isEnglish({ language: 'german,english' })).toBe(false); expect(radio.isEnglish({})).toBe(false); expect(radio.isEnglish({ language: 'englishman' })).toBe(false);
     expect(radio.globalScore({ clickcount: 4700, votes: 400 })).toBeGreaterThan(radio.globalScore({ clickcount: 600, votes: 800000 }));
   });

@@ -3,7 +3,7 @@
 // Source: Radio Browser (community directory, no key). Pipeline: Romanian stations per category (tags + name), HTTPS + MP3/AAC + direct url_resolved only,
 // de-duplicated, a REAL reachability probe (first bytes of audio), then - only where Romania has too few working stations - a few top-voted foreign ones.
 // The result is cached in memory and in Firebase (meta/radio), so a Radio Browser outage never empties the player: the last good list is served instead.
-const crypto = require('crypto'), fs = require('fs'), reports = require('./radio-reports'), custom = require('./radio-custom'), validate = require('./radio-validate'), { popularity, collectListeners } = require('./radio-popularity');
+const crypto = require('crypto'), fs = require('fs'), reports = require('./radio-reports'), custom = require('./radio-custom'), validate = require('./radio-validate'), flagships = require('./radio-flagships'), { popularity, collectListeners } = require('./radio-popularity');
 // Version of the list builder = hash of this very file. A list stored (memory / Firebase) by a different version is rebuilt on the next request, so a deploy never keeps serving the list
 // of the previous code for the 12 h freshness window (that is exactly what kept 39 manele stations on the live site after the fix was deployed).
 const BUILDER_VERSION = (() => { try { return crypto.createHash('sha1').update(fs.readFileSync(__filename)).digest('hex').slice(0, 12); } catch (error) { return 'unknown'; } })();
@@ -146,17 +146,55 @@ async function defaultFetchRo(category) {
 }
 // GLOBAL = the most listened ENGLISH-language music stations of the whole world (any country). "Most listened" = the recent clicks of the directory; the votes are a cumulative counter that
 // is easy to inflate (a station with 800 000 votes and 600 clicks), so they are not asked for any more and only break ties (see globalScore).
+// the tags looked up for every genre family, in ANY language: the English-language top (above) misses the families whose stations are small in the directory (hip-hop, techno, trap, reggae, latin ...);
+// the candidates found here are accepted when English (or empty language in an English-speaking country), or - for the families where language does not matter (world, dance, chill, jazz) - in any language
+const familyTags = () => ['hip hop', 'rap', 'trap', 'r&b', 'urban', 'techno', 'house', 'trance', 'edm', 'drum and bass', 'dubstep', 'minimal', 'deep house', 'electro', 'chillout', 'lounge', 'ambient', 'jazz', 'classical', 'blues',
+  'rock', 'metal', 'alternative', 'punk', 'country', 'pop', 'top 40', 'soul', 'funk', 'disco', '80s', '90s', '70s', 'oldies', ...WORLD_TAGS];   // (a function: WORLD_TAGS is defined further down)
+async function pool(items, size, work, budgetMs = 10000) { const queue = items.slice(), out = [], until = Date.now() + budgetMs; await Promise.all(Array.from({ length: size }, async () => { while (queue.length && Date.now() < until) { const item = queue.shift(); try { out.push(await work(item)); } catch (error) { /* skipped */ } } })); return out; }   // what is not looked up within the budget is skipped: the build must stay inside its minute
 async function defaultFetchGlobal() {
-  return radioBrowser('/json/stations/search?hidebroken=true&language=english&order=clickcount&reverse=true&limit=500').catch(() => []);
+  const english = radioBrowser('/json/stations/search?hidebroken=true&language=english&order=clickcount&reverse=true&limit=500').catch(() => []);
+  const byTag = pool([...new Set(familyTags())], 10, tag => radioBrowser(`/json/stations/search?hidebroken=true&tag=${encodeURIComponent(tag)}&order=clickcount&reverse=true&limit=100`).catch(() => []));
+  return [...(await english), ...(await byTag).flat()];
+}
+// the curated flagship stations (radio-flagships.js): each name is looked up in the directory; what is not there, not https MP3 / AAC or broken is skipped
+async function defaultFetchFlagships() {
+  const found = await pool(flagships.FLAGSHIPS, 10, async entry => {
+    const list = await radioBrowser(`/json/stations/search?hidebroken=true&name=${encodeURIComponent(entry.q)}&order=clickcount&reverse=true&limit=30`).catch(() => []);
+    const hit = flagships.pick(list, entry, usable); return hit ? { ...hit, __flagship: true, __genre: entry.genre } : null;
+  });
+  return found.filter(Boolean);
 }
 // GLOBAL must be MUSIC: the directory has to name a music genre in the tags of the station (a station without any tag, like a Lagos news / talk radio, is not listed), news / talk / religion words
 // leave it out, and what plays NOW is read from the stream (ICY "Artist - Title"): confirmed songs rank higher; an empty title is "unknown", not a verdict (Capital, Gold, Heart send none).
-const MUSIC_TAG = /\b(pop|rock|hits?|top ?40|charts?|dance|edm|house|techno|trance|electronic|electro|dj|hip[ -]?hop|rap|r&b|rnb|soul|funk|disco|jazz|blues|country|classic|oldies|retro|[0-9]0s|indie|alternative|metal|punk|reggae|latin|lounge|chill\w*|ambient|downtempo|folk|classical|afrobeats?|k-?pop|j-?pop|dubstep|dnb|nu-?disco|synth\w*|new wave|music)\b/i;
+const MUSIC_TAG = /\b(pop|rock|hits?|top ?40|charts?|dance|edm|house|techno|trance|electronic|electro|dj|hip[ -]?hop|rap|r&b|rnb|soul|funk|disco|jazz|blues|country|classic|oldies|retro|[0-9]0s|indie|alternative|metal|punk|reggae|latin|lounge|chill\w*|ambient|downtempo|folk|classical|afrobeats?|k-?pop|j-?pop|dubstep|dnb|nu-?disco|synth\w*|new wave|music|reggae|dancehall|ska|dub|reggaeton|salsa|bachata|merengue|tejano|cumbia|afropop|highlife|amapiano|soca|calypso|caribbean|world music|worldbeat|african|bossa|samba|bluegrass|swing|motown|grunge)\b/i;
 const hasMusicTag = station => MUSIC_TAG.test(String(station.tags || ''));
-const NATIVE_ENGLISH = new Set(['US', 'GB', 'CA', 'AU', 'IE', 'NZ', 'ZA']), GLOBAL_PER_NATIVE = 24, GLOBAL_PER_OTHER = 2, GLOBAL_OTHER_TOTAL = 10, GLOBAL_PER_BRAND = 4, NATIVE_BONUS = 2.5;   // 2.5 > the 2 of a confirmed song: at equal clicks an English-speaking country wins over a foreign station with a song   // English broadcast from a non-English country is allowed (the language field is often set wrong there), but limited and ranked below
+// GLOBAL has 50 places shared out by GENRE FAMILY (otherwise the families with the most directory clicks - pop, retro - take everything and hip-hop, reggae, latin, afrobeats are left with 2-3 places):
+// each family gets its places for its best stations; places that a family cannot fill (not enough good stations) go to the best of the rest. A station belongs to the FIRST family whose words are in its tags
+// (specific before generic: "80s,pop" is retro, "latin,pop" is world). Order = the order of the list below.
+const GLOBAL_GENRES = [
+  { id: 'world', quota: 10, re: /\b(reggae|dancehall|ska|dub|reggaeton|latin|salsa|bachata|merengue|tejano|cumbia|afrobeats?|afropop|highlife|amapiano|soca|calypso|caribbean|world music|worldbeat|african|bossa|samba)\b/i },
+  { id: 'hiphop', quota: 14, re: /\b(hip[ -]?hop|rap|urban|trap)\b/i },
+  { id: 'country', quota: 6, re: /\b(country|folk|bluegrass)\b/i },
+  { id: 'jazz', quota: 6, re: /\b(jazz|blues|swing|classical)\b/i },
+  { id: 'rock', quota: 10, re: /\b(rock|indie|alternative|metal|punk|grunge)\b/i },
+  { id: 'soul', quota: 8, re: /\b(soul|funk|r&b|rnb|motown)\b/i },
+  { id: 'dance', quota: 14, re: /\b(dance|edm|house|techno|trance|electronic|electro|dj|nu-?disco|dubstep|dnb|synth\w*)\b/i },
+  { id: 'chill', quota: 6, re: /\b(chill\w*|lounge|ambient|downtempo|relax)\b/i },
+  { id: 'retro', quota: 10, re: /\b(oldies|retro|disco|[0-9]0s|classic hits|new wave)\b/i },
+  { id: 'pop', quota: 16, re: /\b(pop|hits?|top ?40|charts?|music|k-?pop|j-?pop)\b/i }];
+const genreOf = station => { if (station.__genre) return station.__genre; const tags = String(station.tags || ''); const found = GLOBAL_GENRES.find(g => g.re.test(tags)); return found ? found.id : 'pop'; };
+const NATIVE_ENGLISH = new Set(['US', 'GB', 'CA', 'AU', 'IE', 'NZ', 'ZA']), GLOBAL_PER_NATIVE = 60, GLOBAL_PER_OTHER = 3, GLOBAL_OTHER_TOTAL = 14, GLOBAL_PER_BRAND = 5, NATIVE_BONUS = 2.5, FLAGSHIP_BONUS = 4;   // 2.5 > the 2 of a confirmed song: at equal clicks an English-speaking country wins over a foreign station with a song   // English broadcast from a non-English country is allowed (the language field is often set wrong there), but limited and ranked below
 // the company / network behind a stream: its registrable domain (ice1.somafm.com -> somafm.com, media-ice.musicradio.com -> musicradio.com), so ten channels of one network cannot fill the list
+const globalRank = station => globalScore(station) + (station.__flagship ? FLAGSHIP_BONUS : 0);
 const brandOf = station => { try { const labels = new URL(streamUrl(station)).hostname.toLowerCase().split('.'); const n = labels.length >= 3 && labels[labels.length - 1].length === 2 && labels[labels.length - 2].length <= 3 ? 3 : 2; return labels.slice(-n).join('.'); } catch (error) { return ''; } };
+const WORLD_TAGS = ['reggae', 'latin', 'afrobeats', 'world music', 'salsa', 'reggaeton', 'dancehall', 'bachata', 'cumbia'];
+const WORLD_MUSIC = /\b(reggae|dancehall|ska|reggaeton|latin|salsa|bachata|merengue|tejano|cumbia|afrobeats?|afropop|highlife|amapiano|soca|calypso|bossa|samba|world music|worldbeat)\b/i;
+const isWorldMusic = station => WORLD_MUSIC.test(String(station.tags || ''));   // a station that names one of these genres itself (a general Mexican station with "mx" tags does not)
+const LANG_FREE_FAMILIES = new Set(['world', 'dance', 'chill', 'jazz']);   // instrumental or not English by nature: language says nothing
+const LANG_FREE_TAGS = /\b(techno|house|trance|edm|drum and bass|dubstep|minimal|electro|chill\w*|lounge|ambient|downtempo|jazz|classical|blues)\b/i;
+const isLangFree = station => isWorldMusic(station) || LANG_FREE_TAGS.test(String(station.tags || ''));
 const isEnglish = station => /\benglish\b/.test(String(station.language || '').toLowerCase().split(',')[0].trim());   // the FIRST language listed is English ('english', 'british english'); a Portuguese station that also lists English is not
+const isEnglishish = station => isEnglish(station) || (!String(station.language || '').trim() && NATIVE_ENGLISH.has(String(station.countrycode || '').toUpperCase()));   // an empty language in an English-speaking country counts
 const globalScore = station => Math.log10(1 + (Number(station.clickcount) || 0)) * 3 + Math.log10(1 + (Number(station.votes) || 0)) * 0.3 + (Number(station.bitrate) >= 96 ? 1 : Number(station.bitrate) >= 64 ? .5 : 0) + (codecOf(station) === 'AAC' ? .2 : 0);
 async function defaultFetchRoAll() { return radioBrowser(`${base}&countrycode=RO&limit=1000`).catch(() => []); }
 async function defaultFetchForeign(category) {
@@ -165,7 +203,7 @@ async function defaultFetchForeign(category) {
 }
 
 const STYLE_BONUS = { trap: 1.2, new: 0.4 };   // added to the popularity score of a manele station (trap = trap / techno / electro / house / minimal / club / dj)
-const ETNO_MAX = 60, GLOBAL_CANDIDATES = 300, GLOBAL_MAX = 50, GLOBAL_ICY_MAX = 130, GLOBAL_ICY_MS = 12000;   // folk / popular / ethno / party-only stations (tiers 3 and 4) are not manele: they go to ETNO
+const ETNO_MAX = 60, GLOBAL_CANDIDATES = 400, GLOBAL_MAX = 100, GLOBAL_ICY_MAX = 170, GLOBAL_ICY_MS = 10000;   // folk / popular / ethno / party-only stations (tiers 3 and 4) are not manele: they go to ETNO
 const maneleTier = item => { const s = item.s || []; if (s.includes('trap')) return 0; if (s.includes('folk') || s.includes('etno')) return 4; if (s.includes('new')) return 1; return item.m ? 2 : 3; };
 const notManele = item => maneleTier(item) >= 3;
 const publicItem = (station, foreign, categoryId) => {
@@ -201,8 +239,22 @@ async function buildList(deps = {}) {
   }
   // wanted (pinned) stations are probed FIRST, with the full timeout: they must not depend on how much of the time budget the bulk probing uses
   // GLOBAL: the most listened English-language music stations of the whole world (any country), probed together with the rest
-  const globalCandidates = [], seenGlobal = new Set();
-  try { for (const s of (await (deps.fetchGlobal || defaultFetchGlobal)()).filter(s => usable(s) && isEnglish(s) && hasMusicTag(s) && !NOT_MUSIC.test(textOf(s))).sort((a, b) => globalScore(b) - globalScore(a))) { const key = streamKey(streamUrl(s)); if (seenGlobal.has(key)) continue; seenGlobal.add(key); globalCandidates.push(s); if (globalCandidates.length >= GLOBAL_CANDIDATES) break; } } catch (error) { /* no global list this time: the rest of the build is not affected */ }
+  const globalCandidates = [];
+  try {
+    const [flagshipStations, fetchedGlobal] = await Promise.all([(deps.fetchFlagships || (deps.probe ? async () => [] : defaultFetchFlagships))().catch(() => []), (deps.fetchGlobal || defaultFetchGlobal)()]);   // both lookups at the same time
+    const poolMap = new Map();
+    for (const s of [...flagshipStations, ...fetchedGlobal]) {
+      if (!usable(s) || NOT_MUSIC.test(textOf(s))) continue;
+      const flagship = Boolean(s.__flagship), english = isEnglishish(s);
+      if (!flagship && (!hasMusicTag(s) || !(english || isLangFree(s)))) continue;   // a flagship is a chosen brand: no tag / language test; everything else needs a music genre tag and English (or a language-free family)
+      const key = streamKey(streamUrl(s)); if (poolMap.has(key)) continue;
+      if (!flagship && !english) s.__langFree = true;
+      poolMap.set(key, s);
+    }
+    // variety BEFORE the probing: every family brings its best candidates (3x its places), so a big family cannot crowd the small ones out of the probing budget
+    const ranked = [...poolMap.values()].sort((a, b) => globalRank(b) - globalRank(a)), taken = new Map();
+    for (const s of ranked) { const family = genreOf(s), quota = (GLOBAL_GENRES.find(g => g.id === family) || {}).quota || 0; if (s.__flagship || (taken.get(family) || 0) < quota * 3) { taken.set(family, (taken.get(family) || 0) + 1); globalCandidates.push(s); } if (globalCandidates.length >= GLOBAL_CANDIDATES) break; }
+  } catch (error) { /* no global list this time: the rest of the build is not affected */ }
   const everything = [...picked.values()].flat();
   await probeMany(everything.filter(s => s.__pin));
   await probeMany([...everything, ...globalCandidates]);
@@ -250,16 +302,29 @@ async function buildList(deps = {}) {
   // country and GLOBAL_PER_OTHER per other country (the raw ranking is dominated by a few big radio countries and by networks with dozens of channels).
   const alive = globalCandidates.filter(s => probed.get(streamUrl(s)) === true).slice(0, GLOBAL_ICY_MAX), icyDeadline = Date.now() + GLOBAL_ICY_MS, icyReader = deps.readIcy || (deps.probe ? async () => ({ ok: false }) : validate.readIcy);
   let icyNext = 0; await Promise.all(Array.from({ length: 30 }, async () => { while (icyNext < alive.length && Date.now() < icyDeadline) { const s = alive[icyNext++]; try { const icy = await icyReader(streamUrl(s), { timeoutMs: 4500 }); if (icy && icy.ok && icy.title) s.__title = icy.title; } catch (error) { /* unknown stays unknown */ } } }));
-  const rank = row => globalScore(row.s) + (row.song ? 2 : 0) + (NATIVE_ENGLISH.has(String(row.s.countrycode || '').toUpperCase()) ? NATIVE_BONUS : 0);
+  const rank = row => globalRank(row.s) + (row.song ? 2 : 0) + (NATIVE_ENGLISH.has(String(row.s.countrycode || '').toUpperCase()) ? NATIVE_BONUS : 0);
   const globalOrder = alive.map(s => ({ s, song: Boolean(s.__title) && validate.songLike(s.__title, s.name) })).sort((a, b) => rank(b) - rank(a));
-  const globalItems = [], globalKeys = new Set(), globalTitles = new Set(), perCountry = new Map(), perBrand = new Map(); let otherTotal = 0;
-  for (const { s: station, song } of globalOrder) {
-    if (globalItems.length >= GLOBAL_MAX) break; const nk = nameKey(station.name), country = String(station.countrycode || '').toUpperCase(), brand = brandOf(station), tk = song ? String(station.__title).toLowerCase().replace(/[^a-z0-9]/g, '') : '', native = NATIVE_ENGLISH.has(country);
+  const globalKeys = new Set(), globalTitles = new Set(), perCountry = new Map(), perBrand = new Map(), perGenre = new Map(), chosenRows = new Set(); let otherTotal = 0;
+  const infoOf = ({ s: station, song }) => { const country = String(station.countrycode || '').toUpperCase(); return { nk: nameKey(station.name), country, brand: brandOf(station), native: NATIVE_ENGLISH.has(country) || Boolean(station.__flagship), tk: song ? String(station.__title).toLowerCase().replace(/[^a-z0-9]/g, '') : '' }; };
+  const fits = row => {
+    const { nk, country, brand, native, tk } = infoOf(row);
     // outside the English-speaking countries the language field is often wrong: a talk segment on the air (a programme in another language) leaves the station out, and there are at most GLOBAL_OTHER_TOTAL of them
-    if (!native && (otherTotal >= GLOBAL_OTHER_TOTAL || (station.__title && validate.programLike(station.__title, station.name)))) continue;
-    if (globalKeys.has(nk) || (tk && globalTitles.has(tk)) || (perBrand.get(brand) || 0) >= GLOBAL_PER_BRAND || (perCountry.get(country) || 0) >= (NATIVE_ENGLISH.has(country) ? GLOBAL_PER_NATIVE : GLOBAL_PER_OTHER)) continue;
-    if (!native) otherTotal++; globalKeys.add(nk); if (tk) globalTitles.add(tk); perCountry.set(country, (perCountry.get(country) || 0) + 1); perBrand.set(brand, (perBrand.get(brand) || 0) + 1); { const item = publicItem(station, true, 'global'); item.n = item.n.replace(/^[^\p{L}\p{N}]+/u, '') || item.n; globalItems.push(item); }   // names like "# TOP 100 …" / "__80 EXITOS" lose the symbols in front
+    if (row.s.__flagship && !hasMusicTag(row.s) && !row.song) return false;   // a chosen brand without a genre tag is only listed when a song is on the air (no news / talk station gets in by name)
+    if (row.s.__langFree) { const family = genreOf(row.s), quota = (GLOBAL_GENRES.find(g => g.id === family) || {}).quota || 0; if (!LANG_FREE_FAMILIES.has(family) || (perGenre.get(family) || 0) >= quota) return false; }   // a non-English station is only here as world / dance / chill / jazz, and only up to its places
+    if (!native && ((!row.s.__langFree && otherTotal >= GLOBAL_OTHER_TOTAL) || (row.s.__title && validate.programLike(row.s.__title, row.s.name)))) return false;
+    return !(globalKeys.has(nk) || (tk && globalTitles.has(tk)) || (perBrand.get(brand) || 0) >= GLOBAL_PER_BRAND || (perCountry.get(country) || 0) >= (native ? GLOBAL_PER_NATIVE : GLOBAL_PER_OTHER));
+  };
+  const take = row => { const { nk, country, brand, native, tk } = infoOf(row); if (!native && !row.s.__langFree) otherTotal++; globalKeys.add(nk); if (tk) globalTitles.add(tk); perCountry.set(country, (perCountry.get(country) || 0) + 1); perBrand.set(brand, (perBrand.get(brand) || 0) + 1); chosenRows.add(row); };
+  // pass 1: every genre family gets its places, best stations first. The families are served in the order of the list (the rare ones - world, hip-hop, country, jazz - BEFORE pop and retro), so a network
+  // with many channels or a big family cannot use up the places (the per-network / per-country limits) that a rare family needs.
+  for (const family of GLOBAL_GENRES) {
+    for (const row of globalOrder) {
+      if (chosenRows.size >= GLOBAL_MAX || (perGenre.get(family.id) || 0) >= family.quota) break;
+      if (genreOf(row.s) !== family.id || chosenRows.has(row) || !fits(row)) continue; perGenre.set(family.id, (perGenre.get(family.id) || 0) + 1); take(row);
+    }
   }
+  for (const row of globalOrder) { if (chosenRows.size >= GLOBAL_MAX) break; if (!chosenRows.has(row) && !row.s.__langFree && fits(row)) take(row); }   // pass 2: the places a family could not fill go to the best of the rest
+  const globalItems = globalOrder.filter(row => chosenRows.has(row)).map(({ s: station }) => { const item = publicItem(station, true, 'global'); item.n = item.n.replace(/^[^\p{L}\p{N}]+/u, '') || item.n; return item; });   // listed by popularity again (names like "# TOP 100 ..." lose the symbols in front)
   result.push({ id: 'global', emoji: '🌍', label: 'GLOBAL', items: globalItems });
   return { updatedAt: now(), cats: result };
 }
@@ -457,4 +522,4 @@ exports.handler = async event => {
   }
 };
 exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.stationIndex = stationIndex; exports.MOVE_TARGETS = MOVE_TARGETS; exports.CUSTOM_TARGETS = CUSTOM_TARGETS; exports.__resetHidden = () => { servingCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
-exports.hasMusicTag = hasMusicTag; exports.brandOf = brandOf; exports.isEnglish = isEnglish; exports.globalScore = globalScore; exports.knownIndex = knownIndex; exports.healthSweep = healthSweep; exports.playerView = playerView; exports.__resetMemory = () => { memory = null; building = null; };
+exports.isEnglishish = isEnglishish; exports.isLangFree = isLangFree; exports.isWorldMusic = isWorldMusic; exports.genreOf = genreOf; exports.GLOBAL_GENRES = GLOBAL_GENRES; exports.hasMusicTag = hasMusicTag; exports.brandOf = brandOf; exports.isEnglish = isEnglish; exports.globalScore = globalScore; exports.knownIndex = knownIndex; exports.healthSweep = healthSweep; exports.playerView = playerView; exports.__resetMemory = () => { memory = null; building = null; };
