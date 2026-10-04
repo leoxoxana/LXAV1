@@ -1,5 +1,7 @@
 # LXAV1 — CONTEXT (current state, read this FIRST)
 
+
+> **2026-10-04: MASTER INDEX created** → `docs-context/LXAV1_MASTER_INDEX.md` (baseline at git `0f5a8d0`). Start every task there (task → minimum file set). Authoritative runtime path `C:\Users\leon4\Desktop\LXAV1`; knowledge workspace `C:\Users\leon4\Desktop\ClauBack\LXAV1` (copy the index there by hand); the parent `ClauBack` is legacy Drollyv3 and never LXAV1 information. Update the index only when architecture changes (rule in its §31). Stale lines in this file/ARCHITECTURE.md/MEMORY.md are listed in index §20.
 Last rewritten from scratch: 2026-10-03, after commit `c82da19`. Companion docs in this folder: MEMORY.md (permanent knowledge + rules), ARCHITECTURE.md (how it is built),
 CHANGELOG.md (what changed and why). The same four files are mirrored in the repo as `docs-context/` (for cloud sessions) — keep both copies identical.
 
