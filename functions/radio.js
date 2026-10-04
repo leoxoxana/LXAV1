@@ -146,7 +146,9 @@ async function defaultFetchForeign(category) {
   return lists.flat();
 }
 
+const MAX_FOLK = 5;   // folk / popular / ethno / party-only stations (tiers 3 and 4) are not manele: at most MAX_FOLK of them stay in MANELE, the last rows
 const maneleTier = item => { const s = item.s || []; if (s.includes('trap')) return 0; if (s.includes('folk') || s.includes('etno')) return 4; if (s.includes('new')) return 1; return item.m ? 2 : 3; };
+const notManele = item => maneleTier(item) >= 3;
 const publicItem = (station, foreign, categoryId) => {
   const item = { n: cleanName(station.name), u: streamUrl(station), c: codecOf(station), b: Math.round(Number(station.bitrate) || 0), cc: foreign ? String(station.countrycode || '').toUpperCase().slice(0, 2) : 'RO' };
   if (categoryId === 'manele' && !foreign) { const styles = styleOf(station); if (styles.length) item.s = styles; if (explicitManele(station)) item.m = 1; }
@@ -198,8 +200,15 @@ async function buildList(deps = {}) {
       for (const station of candidates) { if (romanian + added >= MIN_PER_CATEGORY || added >= MAX_FOREIGN) break; if (probed.get(streamUrl(station)) === true && add(station, true)) added++; }
     }
     // the three best Romanian stations by quality (listeners / votes / bitrate) are flagged BEFORE the taste order is applied: the 🔥 means popular, not "first in the list"
-    items.filter(item => item.cc === 'RO').slice(0, 3).forEach(item => { item.top = 1; });
-    if (category.id === 'manele') items.sort((a, b) => maneleTier(a) - maneleTier(b));   // stable: inside a tier the quality order stays
+    // MANELE: the flame never goes to a folk / popular / ethno station (they are the last of the category, see below)
+    items.filter(item => item.cc === 'RO' && !(category.id === 'manele' && notManele(item))).slice(0, 3).forEach(item => { item.top = 1; });
+    if (category.id === 'manele') {
+      // owner's decision: folk / popular / ethno are not manele. Only the MAX_FOLK most listened of them stay, as the very last rows (quality order), plain: no flame, no style mark.
+      // All the room goes to the manele and their variants (trap / techno / electro / house / minimal / new / old), ordered by taste tier, then by quality (stable sort).
+      const real = items.filter(item => !notManele(item)).sort((a, b) => maneleTier(a) - maneleTier(b)), rest = items.filter(notManele).slice(0, MAX_FOLK);
+      rest.forEach(item => { delete item.s; delete item.top; });
+      items.length = 0; items.push(...real, ...rest);
+    }
     result.push({ id: category.id, emoji: category.emoji, label: category.label, items });
   }
   return { updatedAt: now(), cats: result };
