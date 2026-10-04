@@ -6013,3 +6013,13 @@ html body:not(#_):not(#__):not(#___):not(#____) #winBoard .board-summary .board-
 html body:not(#_):not(#__):not(#___):not(#____) #winBoard .board-summary .board-total.mission-bonus{background:linear-gradient(90deg,rgba(255,60,200,.30),rgba(255,190,50,.24))!important;border:1px solid rgba(255,150,230,.65)!important;border-radius:999px!important;padding:2px 14px!important;box-shadow:0 0 14px rgba(255,90,220,.35)!important}
 html body:not(#_):not(#__):not(#___):not(#____) #winBoard .board-summary .board-total.mission-bonus span{color:#ff8be6!important;text-shadow:0 0 8px rgba(255,90,220,.6)!important}
 html body:not(#_):not(#__):not(#___):not(#____) #winBoard .board-summary .board-total.mission-bonus b{color:#ffe14a!important;text-shadow:0 0 10px rgba(255,200,40,.7)!important}
+/* leaderboard: LVL column (wild level 0-50, ranks before the money) and a small header line; the row is a 4-column grid: rank, name, LVL, money */
+html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li{display:grid!important;grid-template-columns:30px minmax(0,1fr) 46px minmax(64px,auto)!important;align-items:center!important}
+html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.leaderboard-empty,html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.leaderboard-loading{display:block!important}
+html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li span{min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li .lb-lvl{text-align:center;font-style:normal;font-weight:800;color:#ff9bea!important;text-shadow:0 0 8px rgba(255,90,220,.5)}
+html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li strong{text-align:right}
+html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.lb-headrow{font-size:9px!important;letter-spacing:1.2px;opacity:.8;border-bottom:1px solid rgba(190,160,255,.35)!important}
+html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.lb-headrow *{font:inherit!important;color:#cfd8ff!important;text-shadow:none!important;letter-spacing:inherit!important;text-align:inherit}
+html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.lb-headrow .lb-lvl{text-align:center}html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.lb-headrow strong{text-align:right}
+

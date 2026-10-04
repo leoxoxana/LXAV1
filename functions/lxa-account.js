@@ -160,8 +160,13 @@ async function saveAccountNode(account, keepStamp) {
   rememberKey(account, newKey);
   if (account.__sessionOps) account.__sessionOps.length = 0;
 }
+// ranking: the WILD level (0-50) counts FIRST, then the money (net result), then who reached it first. A player without a level (0) is ranked by money.
+// the money column = what the player HAS: balance + WILD bank (not the net result per difficulty any more)
+const lbMoney = acc => money(number(acc && acc.balance) + number(acc && acc.bank));
+const lbLevel = value => Math.max(0, Math.min(MAX_WILD_LEVEL, Math.floor(number(value))));
+const lbCompare = (a, b) => lbLevel(b.lvl) - lbLevel(a.lvl) || number(b.score) - number(a.score) || number(a.updatedAt) - number(b.updatedAt);
 const LEADERBOARD_EXCLUDED_NAMES = new Set(['LXA', 'AXL', 'WOW']);
-async function leaderboard(account) { const level = String(account.difficulty), boardKey = `leaderboard:profile-${DIFFICULTY_PROFILE_VERSION}:${level}`, boards = await getLeaderboard({ strict: true }), board = boards[boardKey] || [], next = board.filter(row => Number(row.id) !== Number(account.id)); if (!LEADERBOARD_EXCLUDED_NAMES.has(String(account.name || '').toUpperCase())) { next.push({ id: account.id, name: account.name, score: number(account.difficultyData[level]?.score), updatedAt: account.updatedAt }); } next.sort((a, b) => number(b.score) - number(a.score) || number(a.updatedAt) - number(b.updatedAt)); boards[boardKey] = next.slice(0, 100); await saveLeaderboard(boards); }
+async function leaderboard(account) { const level = String(account.difficulty), boardKey = `leaderboard:profile-${DIFFICULTY_PROFILE_VERSION}:${level}`, boards = await getLeaderboard({ strict: true }), board = boards[boardKey] || [], next = board.filter(row => Number(row.id) !== Number(account.id)); if (!LEADERBOARD_EXCLUDED_NAMES.has(String(account.name || '').toUpperCase())) { next.push({ id: account.id, name: account.name, score: lbMoney(account), lvl: lbLevel(account.wildLevel), updatedAt: account.updatedAt }); } next.sort(lbCompare); boards[boardKey] = next.slice(0, 100); await saveLeaderboard(boards); }
 // v148: reads ALL admin-set game settings from Firebase (falls back to
 // game-engine.js's defaults for anything not stored) and applies them to
 // game-engine.js's live state before a spin is resolved - RTP per
@@ -455,7 +460,7 @@ const accountHandler = async event => {
       await saveLeaderboard({});
       return json({ ok: true });
     }
-    // LEADERBOARD = cumulative NET result (payouts minus stakes) per difficulty, from the account itself (difficultyData[level].score); ties: whoever reached the score first.
+    // LEADERBOARD = WILD level first (0-50), then the money the player has (balance + WILD bank); ties: whoever reached it first. (The net result per difficulty is still kept in difficultyData[level].score, it is just not the ranking any more.)
     // The stored board is only a list of account ids; names and scores are read from the real accounts here, so a renamed account shows its real name, a deleted account (or a row left behind by a
     // console edit) disappears, a stale score is corrected, and the position is always the index in the list that is shown.
     if (action === 'leaderboard') {
@@ -464,14 +469,14 @@ const accountHandler = async event => {
       const seen = new Set(), records = [];
       for (const row of stored) {
         const id = Number(row.id); if (seen.has(id)) continue;
-        if (byId) { const acc = byId.get(id); if (!acc || LEADERBOARD_EXCLUDED_NAMES.has(String(acc.name || '').toUpperCase())) continue; seen.add(id); records.push({ id, name: acc.name, score: number(acc.difficultyData?.[level]?.score), updatedAt: number(row.updatedAt) || number(acc.updatedAt) }); }
-        else { seen.add(id); records.push({ id, name: row.name, score: number(row.score), updatedAt: number(row.updatedAt) }); }
+        if (byId) { const acc = byId.get(id); if (!acc || LEADERBOARD_EXCLUDED_NAMES.has(String(acc.name || '').toUpperCase())) continue; seen.add(id); records.push({ id, name: acc.name, score: lbMoney(acc), lvl: lbLevel(acc.wildLevel), updatedAt: number(row.updatedAt) || number(acc.updatedAt) }); }
+        else { seen.add(id); records.push({ id, name: row.name, score: number(row.score), lvl: lbLevel(row.lvl), updatedAt: number(row.updatedAt) }); }
       }
-      records.sort((a, b) => number(b.score) - number(a.score) || number(a.updatedAt) - number(b.updatedAt));
+      records.sort(lbCompare);
       let position = input.id ? records.findIndex(row => Number(row.id) === Number(input.id)) + 1 : 0;
       // An account that is not on this board yet (it has not spun at this difficulty): ranked by its own score among the rows (ties: the older row stays ahead).
-      if (!position && input.id) { try { const own = (byId && byId.get(Number(input.id))) || await read(input.id); if (own) { const ownScore = number(own.difficultyData?.[level]?.score), ownAt = number(own.updatedAt, Date.now()); position = records.filter(row => number(row.score) > ownScore || (number(row.score) === ownScore && number(row.updatedAt) <= ownAt)).length + 1; } } catch (error) { /* keep null */ } }
-      return json({ difficulty: level, records: records.slice(0, 10).map(({ name, score }) => ({ name, score })), yourPosition: position || null });
+      if (!position && input.id) { try { const own = (byId && byId.get(Number(input.id))) || await read(input.id); if (own) { const mine = { score: lbMoney(own), lvl: lbLevel(own.wildLevel), updatedAt: number(own.updatedAt, Date.now()) }; position = records.filter(row => lbCompare(row, mine) <= 0).length + 1; } } catch (error) { /* keep null */ } }
+      return json({ difficulty: level, records: records.slice(0, 10).map(({ name, score, lvl }) => ({ name, score, lvl })), yourPosition: position || null });
     }
     // v150: admin-only player management (USERS, deferred from v143). Every
     // action here re-reads the CALLER's account fresh from Firebase and

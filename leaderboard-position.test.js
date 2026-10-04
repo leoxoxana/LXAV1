@@ -24,20 +24,20 @@ async function setup() {
   const made = await call('create', { name: 'Rank' + ip });
   // the three rows of the board belong to real accounts (their name and score are read from them)
   const accounts = storage.__accounts();
-  [[901, 'A', 50], [902, 'B', 10], [903, 'C', -5]].forEach(([id, name, score]) => { accounts[id + ' : ' + name] = { id, name, role: 'user', createdAt: id, updatedAt: id, difficultyData: { 1: { score, spins: 1, wins: 0 } } }; });
+  [[901, 'A', 50], [902, 'B', 10], [903, 'C', -5]].forEach(([id, name, score]) => { accounts[id + ' : ' + name] = { id, name, role: 'user', createdAt: id, updatedAt: id, balance: score, bank: 0, difficultyData: { 1: { score, spins: 1, wins: 0 } } }; });
   return { call, storage, id: made.body.account.id };
 }
 
 test('an account without a row is ranked by its own score among the rows', async () => {
   const t = await setup();
   const acc = Object.values(t.storage.__accounts()).find(a => a.id === t.id);
-  acc.difficultyData = { 1: { score: 20, spins: 3, wins: 1 } };
+  acc.balance = 20; acc.difficultyData = { 1: { score: 20, spins: 3, wins: 1 } };
   const r = await t.call('leaderboard', { difficulty: 1, id: t.id });
   expect(r.status).toBe(200);
   expect(r.body.yourPosition).toBe(2);          // 50 > 20 > 10
-  acc.difficultyData = { 1: { score: -100, spins: 1, wins: 0 } };
+  acc.balance = -100; acc.difficultyData = { 1: { score: -100, spins: 1, wins: 0 } };
   expect((await t.call('leaderboard', { difficulty: 1, id: t.id })).body.yourPosition).toBe(4);
-  acc.difficultyData = { 1: { score: 999, spins: 1, wins: 1 } };
+  acc.balance = 999; acc.difficultyData = { 1: { score: 999, spins: 1, wins: 1 } };
   expect((await t.call('leaderboard', { difficulty: 1, id: t.id })).body.yourPosition).toBe(1);
 });
 
@@ -46,7 +46,7 @@ test('an account that has a row keeps the position found by its id, and a reques
   const board = await t.storage.getLeaderboard();
   board[BOARD][1].id = t.id;                    // the row of B now belongs to this account
   const acc = Object.values(t.storage.__accounts()).find(a => a.id === t.id);
-  acc.difficultyData = { 1: { score: 10, spins: 2, wins: 1 } };
+  acc.balance = 10; acc.difficultyData = { 1: { score: 10, spins: 2, wins: 1 } };
   const r = await t.call('leaderboard', { difficulty: 1, id: t.id });
   expect(r.body.yourPosition).toBe(2);
   expect((await t.call('leaderboard', { difficulty: 1 })).body.yourPosition).toBeNull();
