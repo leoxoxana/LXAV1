@@ -1,16 +1,15 @@
 # LXAV1 — CONTEXT (current state, read this FIRST)
 
 Last rewritten from scratch: 2026-10-03, after commit `c82da19`. Companion docs in this folder: MEMORY.md (permanent knowledge + rules), ARCHITECTURE.md (how it is built),
-CHANGELOG.md (what changed and why). The same four files are mirrored in the repo as `docs-context/` (for cloud sessions) — keep both copies identical.
+CHANGELOG.md (what changed and why). The repo no longer carries these notes (`docs-context/` was removed from `main` on 2026-10-04); this folder is the single source. Cloud sessions get them from GitHub branch `claubak-docs` (`claubak-copy/CONTEXT/`). **Start with `LXAV1_MASTER_INDEX.md`** (task → minimum file set).
 
 ## 1. Snapshot
 - Project: LXAV1 = LEONXOXANA virtual-credit slot demo (no real money). Folder `C:\Users\leon4\Desktop\LXAV1`, repo github.com/leoxoxana/LXAV1 (remotes `origin` and `leo`, same URL), branch `main`.
-- Code: local `main` is ahead of GitHub by the commits listed by `git rev-list --count origin/main..HEAD` (the owner pushes with `git push origin main`; check before a cloud hand-off). GitHub also has two OLD cloud-made branches:
-  `main-hsvmm0` (merged locally, safe to delete) and `claude/project-thread-n4n2yo` (stale, do NOT merge, safe to delete).
+- Code: GitHub `main` = `ca2e4ab` (2026-10-04 cleanup: `docs-context/`, `scripts/build.js`, 13 unreferenced images removed; verified unreferenced). Branches: `claubak-docs` = these notes for cloud sessions (never merge into `main`, the folder would be public); `main-hsvmm0` and `claude/project-thread-n4n2yo` are obsolete (delete: `git push origin --delete claude/project-thread-n4n2yo main-hsvmm0`); local `radio-restructure-wip` = unfinished radio folder move (not pushed).
 - Deploy: the USER deploys (`vercel --prod` from the LXAV1 folder). LIVE (verified by me with read-only requests right after the owner's deploy on 2026-10-03; deployment lxa-jap8guh9a-lxa3, alias https://lxoxa.vercel.app, HTTP 200): game-engine v=377, layout-fix v=436, renderer v=406, spin-button v=9, style v=376 = the code through the connected-RTP commit (login/logout, AUTO bet settle, a11y, RTP switch, atomic ids, new headers). The CLI's 'Deployment Protection' note applies to the unique deployment URL only; the public alias is open. Production `rtpSettings` now holds 130 / 110 / 95 saved by the owner in LINE mode (switch off): totals at WILD 0 = 142.0 / 120.8 / 102.3 (the owner may turn the switch on to make them TOTAL targets). Firebase rules (owner pasted them): `.read:false, .write:false` (kept in `database.rules.json`).
 - Vercel: project lxa3/lxa; domains lxoxa.vercel.app (primary), lxav1.vercel.app, lxa-lxa3.vercel.app. Database: Firebase Realtime DB `lxav1-a5cfd` (europe-west1).
-- Asset versions now in index.html: style.css 376, layout-fix.css 434, responsive-compact.css 374, game-engine.js 376, spin-button.js 9, renderer.js 403. Service worker cache `lxa-v3-cache`.
-- Checks at this commit: Jest 63/63 (7 suites), ESLint 0 errors / 18 warnings (old unused vars), deployment-check.js "client and server in sync", installability errors [].
+- Asset versions: read them from `index.html` (`?v=` per file; not copied here, they change every edit). Service worker cache `lxa-v3-cache`.
+- Checks (2026-10-04, cloud container): Jest 19 of 20 suites ran, 242 tests passed (`storage-contract` needs `firebase-admin`, 3 tests; total 245); on the owner's PC run `npm test`. ESLint and installability not re-run this round.
 
 ## 2. What the last session round did (details in CHANGELOG)
 1. Stake rules: max stake = half the price of the next WILD level (25.5M at WILD 50); "+" up to the whole balance but never above that cap; 50% = half balance clamped; "MAX ..." line under the stake.
@@ -23,7 +22,7 @@ CHANGELOG.md (what changed and why). The same four files are mirrored in the rep
 10. Master audit: Firebase reads fail closed (duplicate-id / "session expired" root cause), per-IP limits use Vercel's real client IP, `.vercelignore`, lighter assets (letters, Ko-fi mug), slider aria name.
 11. `?debug=1` on-screen log (spin-button.js) to diagnose taps on a phone without dev tools.
 12. Auth + AUTO rewrite: per-device hashed sessions, explicit logout (server revoke + game invalidation), no id+name login, token-authorised play actions, GELD authentication hole closed, AUTO waits 800 ms while the bet is being changed (no spin/result/balance change from PLUS/MINUS), stale results after logout dropped; 21 end-to-end browser checks against the real server code.
-13. Memory/hand-off: this folder, `docs-context/`, `ClauBack\LXAV1\vN` backups, cloud-session hand-off prepared.
+13. Memory/hand-off: this folder, `ClauBack\LXAV1\vN` backups, cloud-session hand-off prepared.
 
 ## 3. Open items (honest list)
 - User report "SPIN does nothing in the phone browser, works in the installed app": NOT reproduced in emulation. Likely explained by invisible server rejections (now visible) — to be confirmed after deploy.
@@ -51,12 +50,12 @@ CHANGELOG.md (what changed and why). The same four files are mirrored in the rep
 - Plan: Claude Pro. Usage windows: 5-hour (was 86% at the last check, resets about every 5 h) and weekly (51%, resets Thursday 21:00). "Extra usage" is OFF (0 EUR).
 - Separate credit: "Cloud session credits" $70 of $100 left, expires 2026-11-05 08:59 (GMT+1). It applies automatically ONLY to cloud sessions (after it is used, the normal plan applies).
 - Hand-off: (1) if `git rev-list --count origin/main..HEAD` is not 0 the user runs `git push origin main` (docs-only commits may be pending); (2) menu `LXAV1 v` -> Open in -> Continue in -> Cloud, or New -> Cloud on repo leoxoxana/LXAV1 branch main;
-  (3) first message: "Citește docs-context/CONTEXT.md și docs-context/MEMORY.md. Răspunde scurt, numerotat, în română. Nu face deploy și nu face push fără să-ți cer. Textele noi se scriu în de, ro, en.";
+  (3) first message: "Citește CONTEXT/LXAV1_MASTER_INDEX.md, CONTEXT/CONTEXT.md și CONTEXT/MEMORY.md (branch claubak-docs, folderul claubak-copy/). Răspunde scurt, numerotat, în română. Nu face deploy și nu face push fără să-ți cer. Textele noi se scriu în de, ro, en.";
   (4) check `git log -1 --oneline` = latest hash. Only ONE session edits the code at a time. Cloud cannot run the Edge/CDP tests nor `vercel --prod`. `.env.local` never leaves the PC.
 - An in-app attempt to move the session to the cloud was blocked by the safety classifier; the user does the move/push from the UI (do not work around that).
 
 ## 6. Resume protocol (for me, any session)
 1. Read this file and MEMORY.md. Open ARCHITECTURE.md only for the area being changed. 2. `git status`, `git log -5`, `git rev-list --count origin/main..HEAD`.
 3. After EVERY real change: verify measurably (Jest, ESLint, headless Edge incl. real standalone), commit locally with the trailer, bump the `?v=` of every edited asset in index.html,
-   save the touched files in `ClauBack\LXAV1\vN\` with a README, update CHANGELOG + CONTEXT (+ MEMORY if permanent), mirror the 4 docs to `docs-context/`, commit.
+   save the touched files in `ClauBack\LXAV1\vN\` with a README, update CHANGELOG + CONTEXT (+ MEMORY if permanent), commit.
 4. Answer short, numbered, Romanian; end with "rulează `vercel --prod` din folderul LXAV1". Never deploy, never push, never touch secrets.

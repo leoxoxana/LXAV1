@@ -1,15 +1,15 @@
 # LXAV1 — ARCHITECTURE
 
-Rewritten from scratch 2026-10-03 from the code as of commit `c82da19`. Open only the section needed for the task at hand.
+Rewritten from scratch 2026-10-03 from the code as of commit `c82da19`. Open only the section needed for the task at hand. For navigation use `LXAV1_MASTER_INDEX.md` (this file is older and shorter).
 
 ## 1. Files and runtime
 - Static site, repo root served as-is by Vercel (`vercel.json` outputDirectory "."; no build step). `.vercelignore` limits what is uploaded (tests, docs, dev tools, unreferenced art).
-- Client: `index.html` (markup + inline scripts: language/header helpers, `updateLockKofiFloat`, service-worker registration), `style.css` (base + `--lxa-*` tokens), `layout-fix.css` (~395 KB, ~5300 lines of
+- Client: `index.html` (markup only; NO inline scripts since CSP `script-src 'self'`: they moved to `boot-wild-preload.js`, `sw-register.js`, `header-fit.js`; radio: `radio.js`, `admin-radio.js`), `style.css` (base + `--lxa-*` tokens), `layout-fix.css` (~395 KB, ~5300 lines of
   appended override blocks), `responsive-compact.css` (still linked), `game-engine.js` (pure rules, UMD, also required by Jest/server), `renderer.js` (~136 KB: UI, i18n tables, account panel, reels, spin loop),
   `spin-button.js` (SPIN/STOP button, progress ring, `?debug=1` log). PWA: `manifest.webmanifest`, `sw.js`, `assets/icons/*`.
 - Server (Vercel Node functions): `api/lxa-account.js` (adapter: req/res -> `{httpMethod, queryStringParameters, headers, body}` -> `handler` -> res) -> `functions/lxa-account.js` (all actions),
   `functions/firebase-storage.js`, `functions/security.js`. `middleware.js` = Edge middleware that 404s `/functions/`, package files, `*.test.js`, dev tools, `*.md`, `*.bak`, `/data/`, `/node_modules/`.
-- Dev tools in the root: `local-server.js` (talks to PRODUCTION Firebase — do not use for tests), `audit-simulations.js`, `deployment-check.js`. Tests: 7 `*.test.js` files (63 tests).
+- Dev tools in the root: `local-server.js` (talks to PRODUCTION Firebase — do not use for tests), `audit-simulations.js`, `deployment-check.js`. Tests: 20 `*.test.js` files (Jest, 245 tests; by area in LXAV1_MASTER_INDEX.md §23).
 - Assets used: `lxa-header.webp` (animated header, 334 KB), `letters/{L,E,O,N,X,A}.png` (~34 KB each), `wild-wide.webp` + `wild-stack.webp`, `kofi-support-me-2.gif` (shown 233x62), `kofi-rainbow-mug.gif`
   (120 px, shown 26-32 px), fonts (Barlow Condensed 500/700, JetBrains Mono 400/700, woff2), icons (`lxa-icon-*`, apple-touch-icon, favicon-16/32). Unreferenced source art is kept locally only.
 

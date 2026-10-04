@@ -4,7 +4,7 @@ Acest folder e arhiva mea de lucru pentru proiectul LXAV1 (C:\Users\leon4\Deskto
 de la Drollyv3 (acelea rămân neatinse, sunt doar inspirație/istoric).
 
 ## Cum e organizat
-- `CONTEXT\` = cele 4 documente de reluare (rescrise de la zero pe 2026-10-03, la commit c82da19):
+- `CONTEXT\` = cele 5 documente de reluare (cele 4 de mai jos + `LXAV1_MASTER_INDEX.md` = harta completă, task → fișiere minime; CITEȘTE-L primul) (rescrise de la zero pe 2026-10-03, la commit c82da19):
   - `CONTEXT.md`      — starea curentă, ce s-a făcut recent, ce rămâne deschis, pașii următori, predarea către cloud. CITEȘTE-L PRIMUL la reluare.
   - `MEMORY.md`      — cunoștințe permanente verificate: regulile userului, regulile jocului, conturi/Firebase/configurare, deploy, sistemul CSS, PWA, unelte, greșeli, ce NU e verificat.
   - `ARCHITECTURE.md`— cum e construită aplicația (fișiere, motor, server, flux de spin, conturi, UI, persistență). Se deschid doar secțiunile relevante.
@@ -12,13 +12,13 @@ de la Drollyv3 (acelea rămân neatinse, sunt doar inspirație/istoric).
 - `FULL_<data>_<commit>\` = copie completă a proiectului (fără node_modules/.git) ca punct de revenire independent de git. NU conține și nu trebuie să conțină `.env.local` (secrete).
 - `vN\` = fișierele atinse la o modificare, cu structura relativă față de rădăcina LXAV1, plus `README.md`. Numărătoarea pornește de la v1 pentru LXAV1 (Drollyv3 a ajuns la v29).
 - `PROMPTS\` = prompturile de lucru: `UNIVERSAL_PROMPT.md` (CEL PRINCIPAL: merge în orice chat/model/sesiune, locală sau cloud, cu sau fără unelte; are setări TASK/MODE/SCOPE/LANG/DETAILS și fișa proiectului
-  inclusă), plus `MASTER_AUDIT_v2.md` (audit complet) și `MASTER_AUDIT_LITE.md` (o pagină). Oglindite în repo: `docs-context\prompts\`.
-- Aceleași 4 documente sunt oglindite în repo, în `docs-context\` (le citește și o sesiune cloud). Actualizează-le pe amândouă și fă commit.
+  inclusă), plus `MASTER_AUDIT_v2.md` (audit complet) și `MASTER_AUDIT_LITE.md` (o pagină).
+- Repo-ul NU mai conține aceste documente (`docs-context\` a fost scos din `main` pe 2026-10-04). Pentru sesiuni cloud există ramura GitHub `claubak-docs` (folderul `claubak-copy\`, nu se îmbină niciodată în `main`). Dacă o actualizezi, copiezi fișierele acolo.
 
 ## Reguli de lucru
 - Înainte de orice: citesc `CONTEXT\CONTEXT.md` + `CONTEXT\MEMORY.md`, apoi `git status` / `git log -5` / `git rev-list --count origin/main..HEAD`.
 - După o modificare reală: (1) verific măsurat (Edge headless/CDP incl. standalone real, Jest, lint), (2) commit local cu trailer, (3) salvez fișierele atinse în `vN` + README,
-  (4) actualizez CHANGELOG.md, CONTEXT.md și, dacă am aflat ceva permanent, MEMORY.md, (5) oglindesc cele 4 documente în `docs-context\`. Backup-urile sunt aprobate dinainte.
+  (4) actualizez CHANGELOG.md, CONTEXT.md și, dacă am aflat ceva permanent, MEMORY.md. Backup-urile sunt aprobate dinainte.
 - NU dau deploy și NU fac push pe GitHub (doar userul rulează `vercel --prod`); termin cu „rulează vercel --prod din folderul LXAV1".
 - Răspunsuri scurte, numerotate, în română. Spun sincer ce nu am putut verifica (iPhone/Android real etc.).
 - Nu rescriu fișiere UTF-8 cu PowerShell Get-Content/Set-Content (strică diacriticele și €) — Python cu `encoding='utf-8', newline=''` sau Edit.
@@ -40,7 +40,7 @@ de la Drollyv3 (acelea rămân neatinse, sunt doar inspirație/istoric).
 - v12 (commit c138f58): fara rotunjiri - motorul pentru oaspeti plateste cu zecimale ca serverul; acelasi RTP la orice miza. game-engine v=378. 91 teste.
 - Starea de la ultima scriere: codul = commit c82da19, publicat pe GitHub de user (origin/main = c82da19); după el doar commit-uri de documente (a02275e și următoarele), posibil nepublicate.
   Nimic după 116ffd8 nu e confirmat deployat. Branch-uri făcute de sesiuni cloud pe GitHub: main-hsvmm0 (îmbinat local, se poate șterge), claude/project-thread-n4n2yo (vechi, NU îl îmbina).
-- (următoarea modificare reală → v7)
+- (următoarea modificare reală → v58)
 - v13 (commit 40b7cc0): popup admin cu scroll (portrait + landscape), miza centrata pe +/-, buton SPIN restilizat in starea STOP, steag 2.5 px mai jos, Ko-fi sub lacat. renderer v=407, layout-fix v=437. 91 teste.
 - v14 (commit 1f747fb): buton SPIN v2 - fara suma pe buton, cuvant mai mare si centrat, icoana, clipire aurie la profit / puls rece la pierdere cu plata, stare fara bani. spin-button v=10, renderer v=408, layout-fix v=438. 91 teste.
 - v15 (commit 7af0380): buton SPIN v3 - explozie aurie 2.2 s la profit, coral 1.1 s la plata sub miza, inel de rezultat pana la urmatorul SPIN, icoane play / dublu play / stop. spin-button v=11, layout-fix v=439. 91 teste.
@@ -89,3 +89,4 @@ de la Drollyv3 (acelea rămân neatinse, sunt doar inspirație/istoric).
 - v57 (commit 695365b): lacat + zoom: meta viewport nu mai e rescris, cu pagina marita lacatul lasa degetele sa miste / micsoreze; ADMIN > RADIO doar emoji (🔍 📂 ↩ 🙈 👁️ 🗑️), 10 chipuri emoji pentru mutare, tab Statii cu TOATE statiile; panoul trezeste singur construirea listei dupa deploy; PLATZ nu mai ramane # in AUTO; fara hover lipit pe iOS. renderer v=426, layout-fix v=495, radio.js v=11, admin-radio.js v=3.
 - v57b (commit 9dbd750): meta viewport minimum-scale=1: pagina nu se mai poate micsora sub marimea normala (lacatul si Ko-fi pluteau in afara site-ului).
 - v57c (commit 1a3e30e): ADMIN > RADIO: butonul de sters rapoarte e acum ✅ (rezolvat, fara dialog); dialogul de confirmare era SUB panoul admin (z 3000 < 5000), acum 6000 cu fundal usor. renderer v=427, layout-fix v=496.
+- 2026-10-04: Master Index v2 (baseline ca2e4ab) în `CONTEXT\`; `main` curățat (ca2e4ab): scoase `docs-context\`, `scripts\build.js`, 13 imagini nereferențiate; ramura `claubak-docs` pentru sesiuni cloud; reguli Firebase live verificate (deny-all).

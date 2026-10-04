@@ -5,7 +5,13 @@ Rewritten from scratch 2026-10-03 (65 commits at that time; the hash is the auth
 
 > Older entries (everything before the last 8 sections) are archived in ClauBack\LXAV1\archive\CHANGELOG-full-through-2026-10-04.md - not needed for normal tasks.
 
-## 2026-10-04 (latest) - Lock + zoom fix, admin radio emoji-only, rank line, stuck hover (commit 695365b; renderer v=426, layout-fix v=495, radio.js v=11, admin-radio.js v=3)
+## 2026-10-04 - Master Index v2 + `main` cleanup (docs/cleanup only, no behaviour change)
+- New `CONTEXT\LXAV1_MASTER_INDEX.md` (complete map, baseline `ca2e4ab`). The 4 stale statements found by the first index were fixed (SW cache name, inline scripts/7 tests, copied `?v=` numbers, RADIO_HIDE vs meta/radioHide = additive filters).
+- `main` (commit `ca2e4ab`): removed `docs-context/`, `scripts/build.js`, 13 unreferenced images (3 old icons + 10 source images); `.vercelignore` pruned. Checked reference by reference; no deploy needed.
+- Branch `claubak-docs` created for cloud sessions (notes only, never merge into `main`). Live Firebase rules verified deny-all.
+- Open: delete obsolete branches `main-hsvmm0`, `claude/project-thread-n4n2yo` (owner runs the command); radio folder move still local in `radio-restructure-wip`.
+
+## 2026-10-04 - Lock + zoom fix, admin radio emoji-only, rank line, stuck hover (commit 695365b; renderer v=426, layout-fix v=495, radio.js v=11, admin-radio.js v=3)
 - Owner (screenshots): after any zoom, pressing the lock breaks the page; admin buttons with words, ugly native drop-down, wants every station movable; the radio on the phone still showed 8 categories (the deploy had not rebuilt the stored list yet: the first visit of the radio rebuilds it, ~30 s; the admin saw the old list too).
 - Lock + zoom: updateLockState no longer rewrites the viewport meta; the lock lets the fingers pan / pinch out while visualViewport.scale > 1 (html.lxa-zoomed), pins again at 1. Admin radio: emoji-only buttons, 📂 + 10 emoji chips, Stations tab with every station, outdated-list wake-up, specific errors. Rank line filled directly while spinning. Hover effects only for real pointers.
 - Radio Browser (the public station directory) was down during testing (503 / DNS): tests seed the dev server's cache from the live list (scratchpad seed_cache.js). Server code unchanged by that.

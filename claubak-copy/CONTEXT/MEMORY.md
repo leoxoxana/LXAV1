@@ -77,7 +77,7 @@ Rewritten from scratch 2026-10-03. Everything here was checked against the code/
 ## 5. Deployment (Vercel)
 - Project lxa3/lxa; domains lxoxa.vercel.app (primary), lxav1.vercel.app, lxa-lxa3.vercel.app. `vercel.json`: outputDirectory ".", `no-cache, must-revalidate` on everything, CSP (`default-src 'self'`,
   `connect-src` firebasedatabase.app), HSTS, X-Frame-Options DENY. No netlify.toml / Netlify runtime code left (only history comments).
-- `.vercelignore` keeps docs-context, scripts, tests, dev tools, readme and unreferenced art (~14 MB) out of the deployment. Never add a file the site needs (index.html, the 4 stylesheets, game-engine.js,
+- `.vercelignore` keeps tests, dev tools, readme, ESLint config and database rules out of the deployment (the unreferenced art, `scripts/` and `docs-context/` were deleted from git on 2026-10-04). Never add a file the site needs (index.html, the 4 stylesheets, game-engine.js,
   renderer.js, spin-button.js, sw.js, manifest, middleware.js, api/, functions/, used assets).
 - Cache-bust: bump `?v=NNN` in index.html on EVERY edit of style.css / layout-fix.css / responsive-compact.css / game-engine.js / renderer.js / spin-button.js. `sw.js` is network-first (cache `lxa-v3-cache`,
   the API is never cached), so a new deploy is picked up; an installed iOS PWA can still keep an old page alive for days (close it completely).
@@ -108,7 +108,7 @@ Rewritten from scratch 2026-10-03. Everything here was checked against the code/
 - Measured parity at 390 px: art->cards gap 6 px in browser, installed app and PC; 11 viewports x 3 languages and live orientation switches: 0 overflow/clip findings.
 
 ## 8. Tooling that works here (recreate scripts from these recipes)
-- Jest (63 tests, 7 files) + ESLint (0 errors, 18 old warnings). `deployment-check.js` compares client/server numbers.
+- Jest (245 tests, 20 files) + ESLint (0 errors, 18 old warnings). `deployment-check.js` compares client/server numbers.
 - Headless Edge via CDP (WebSocket, `Runtime.evaluate`). REAL STANDALONE: start Edge with `--app=http://127.0.0.1:PORT/` (then `matchMedia('(display-mode: standalone)')` is true; `Emulation.setEmulatedMedia`
   does NOT work) plus `Emulation.setSafeAreaInsetsOverride {insets:{top:59,bottom:34,left:0,right:0}}`. Phone browser = normal launch, 390 px, insets 0. Real touch: `Emulation.setTouchEmulationEnabled` +
   `Input.dispatchTouchEvent`. Pause animations before pixel work: `document.getAnimations().forEach(a=>{a.pause();a.currentTime=1500})`. Full-page capture with `captureBeyondViewport` + PIL pixel sampling.
