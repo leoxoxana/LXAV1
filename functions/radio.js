@@ -9,17 +9,17 @@ const MAX_AGE_MS = 12 * 3600 * 1000;          // a stored list younger than this
 const MIN_REFRESH_MS = 30 * 60 * 1000;        // ?refresh=1 (daily cron) cannot rebuild more often than this
 const PER_CATEGORY_CANDIDATES = 35;           // best-scored https candidates per category that get probed
 const PER_CATEGORY_TWINS = 15;                // plus this many best-scored http-only stations whose https twin is tried (separate slots: they must not push good https stations out)
-const SECOND_CHANCE_MAX = 30;                 // failed probes that get a second try (pinned first, then best-scored)
+const SECOND_CHANCE_MAX = 60;                 // failed probes that get a second try (pinned first, then best-scored)
 const TWIN_TIMEOUT_MS = 3500;                 // a twin that does not answer quickly is not worth waiting for
 const PER_CATEGORY_MAX = 60;                  // stations kept per category
 const MIN_PER_CATEGORY = 10;                  // below this many Romanian stations, top foreign ones are added ...
 const MAX_FOREIGN = 6;                        // ... but never more than this many per category
 const PROBE_TIMEOUT_MS = 5000;
-const BUILD_BUDGET_MS = 19000;                // the function may run 30 s (vercel.json): leave room for the Firebase write and the response
+const BUILD_BUDGET_MS = 26000;                // the function may run 30 s (vercel.json): leave room for the Firebase write and the response
 
 // not = stations that are about something else (news, talk, religion) never enter a music category
 const CATEGORIES = [
-  { id: 'manele', emoji: '🔥', label: 'MANELE', pin: /trapanel|\btrap\b|t[e]?hno|techno|\bclub\b|hip[ -]?hop|\bdj\b|remix|manele noi|manele vechi/i, re: /manele|manea|trapanel|petrecere|lautaresc|lăutăresc|taraf|folclor|folcloric|muzic[aă] popular[aă]/i, queries: ['manele', 'petrecere', 'trapanele', 'lautareasca'], foreign: [] },
+  { id: 'manele', emoji: '🔥', label: 'MANELE', limits: { direct: 120, twins: 80, max: 120 }, pin: /trapanel|\btrap\b|t[e]?hno|techno|\belectro|\bhouse\b|minimal|\bclub\b|hip[ -]?hop|\bdj\b|remix|manele noi|manele vechi/i, re: /manele|manea|trapanel|petrecere|lautaresc|lăutăresc|taraf|folclor|folcloric|muzic[aă] popular[aă]/i, queries: ['manele', 'petrecere', 'trapanele', 'lautareasca'], foreign: [] },
   { id: 'rap', emoji: '🎤', label: 'RAP', re: /\brap\b|hip[ -]?hop|\btrap\b|urban|\br&b\b/i, queries: ['rap', 'hip hop', 'trap'], foreign: ['hip hop', 'rap'] },
   { id: 'house', emoji: '🪩', label: 'HOUSE', re: /\bhouse\b|deep house|progressive house/i, not: /tech[ -]?house/i, queries: ['house', 'deep house'], foreign: ['house', 'deep house'] },
   { id: 'techno', emoji: '⚡', label: 'TECHNO', re: /techno|minimal|tech[ -]?house|trance|\belectronic\b/i, queries: ['techno', 'minimal', 'trance', 'electronic'], foreign: ['techno', 'minimal'] },
@@ -37,8 +37,9 @@ const isHidden = station => { const name = String(station.name || '').toLowerCas
 //  old = manele vechi / de aur / retro,  new = manele noi / hits,  trap = trap / techno / club / hip hop / dj / remix / edm / bass / electronic,  etno = etno / lautareasca / taraf / orient / balcan,
 //  folk = muzica populara / folclor (the tag "populara" alone is only a party tag on ~45 manele stations: it counts together with "popular" in the name).
 // TASTE ORDER inside MANELE (owner's decision: nothing that works is deleted, what he likes goes first, what he does not like goes last):
-//   0 trap / techno manele (trapanele),  1 new manele,  2 everything else (party, old),  3 folk and ethno (last). Trap wins over folk / ethno (a club station that also has an ethno tag stays on top).
-const STYLE_RES = { old: /manele vechi|manele de aur|\bvechi\b|\bretro\b|nostalg|oldies|\b90s\b/i, new: /manele noi|\bhits?\b|hituri|\b20[12][0-9]\b/i, trap: /trapanel|\btrap\b|t[e]?hno|techno|\bclub\b|hip[ -]?hop|\bdj\b|remix|\bedm\b|\bbass\b|electronic/i, etno: /\betno\b|l[aă]utar|\btaraf\b|orient|balcan|damblagii/i };
+//   0 trap / techno / electro / house / minimal / club manele,  1 new manele,  2 manele (the word is in the tags or the name),  3 party-only (petrecere / populara without the word manele),  4 folk and ethno (last).
+// Trap wins over folk / ethno (a club station that also has an ethno tag stays on top).
+const STYLE_RES = { old: /manele vechi|manele de aur|\bvechi\b|\bretro\b|nostalg|oldies|\b90s\b/i, new: /manele noi|\bhits?\b|hituri|\b20[12][0-9]\b/i, trap: /trapanel|\btrap\b|t[e]?hno|techno|\belectro|\bhouse\b|minimal|\bclub\b|hip[ -]?hop|\bdj\b|remix|\bedm\b|\bbass\b/i, etno: /\betno\b|l[aă]utar|\btaraf\b|orient|balcan|damblagii/i };
 const FOLK_TAGS = ['folclor', 'muzică populară', 'muzica populara', 'folclor românesc', 'folclor romanesc', 'muzică folclorică', 'muzica folclorica'];
 const isFolk = station => { const tags = String(station.tags || '').toLowerCase().split(',').map(t => t.trim()).filter(Boolean); if (tags.length > 8 && !/folclor|folcloric/i.test(station.name || '')) return false;   // multi-genre stations are not folk stations (unless the name says folclor)
   return tags.some(t => FOLK_TAGS.includes(t)) || /folclor|folcloric/i.test(station.name || '') || (tags.some(t => t === 'populară' || t === 'populara') && /\bpopular\b/i.test(station.name || '')); };
@@ -79,7 +80,10 @@ function categoryScore(category, station) {
   return points || 1;
 }
 // at most two categories per station (a station tagged house + techno + dance + chill + pop is not shown in five lists)
-const topCategories = station => CATEGORIES.map(category => ({ id: category.id, points: categoryScore(category, station) })).filter(item => item.points > 0).sort((a, b) => b.points - a.points).filter((item, index) => index === 0 || (index === 1 && item.points >= 2)).map(item => item.id);
+// a station that says manele (tag or name) is always listed in MANELE, whatever else it is tagged (dance, house, club, ...), plus its best other category
+const explicitManele = station => /manele|manea|trapanel/i.test(station.tags || '') || /manele|manea|trapanel/i.test(station.name || '');
+const topCategories = station => explicitManele(station) && inCategory(CATEGORIES[0], station) ? ['manele', ...topCategoriesBase(station).filter(id => id !== 'manele').slice(0, 1)] : topCategoriesBase(station);
+const topCategoriesBase = station => CATEGORIES.map(category => ({ id: category.id, points: categoryScore(category, station) })).filter(item => item.points > 0).sort((a, b) => b.points - a.points).filter((item, index) => index === 0 || (index === 1 && item.points >= 2)).map(item => item.id);
 
 // real reachability: the stream must answer 2xx with audio bytes (not an HTML error page, not HLS)
 async function probeStream(url, timeoutMs = PROBE_TIMEOUT_MS) {
@@ -115,10 +119,10 @@ async function defaultFetchForeign(category) {
   return lists.flat();
 }
 
-const maneleTier = item => { const s = item.s || []; if (s.includes('trap')) return 0; if (s.includes('folk') || s.includes('etno')) return 3; if (s.includes('new')) return 1; return 2; };
+const maneleTier = item => { const s = item.s || []; if (s.includes('trap')) return 0; if (s.includes('folk') || s.includes('etno')) return 4; if (s.includes('new')) return 1; return item.m ? 2 : 3; };
 const publicItem = (station, foreign, categoryId) => {
   const item = { n: cleanName(station.name), u: streamUrl(station), c: codecOf(station), b: Math.round(Number(station.bitrate) || 0), cc: foreign ? String(station.countrycode || '').toUpperCase().slice(0, 2) : 'RO' };
-  if (categoryId === 'manele' && !foreign) { const styles = styleOf(station); if (styles.length) item.s = styles; }
+  if (categoryId === 'manele' && !foreign) { const styles = styleOf(station); if (styles.length) item.s = styles; if (explicitManele(station)) item.m = 1; }
   return item;
 };
 
@@ -138,7 +142,8 @@ async function buildList(deps = {}) {
     const raw = [...(await fetchRo(category)).filter(s => String(s.countrycode || 'RO').toUpperCase() === 'RO'), ...roAll].filter(s => (usable(s) || upgradable(s)) && topCategories(s).includes(category.id));
     const unique = new Map(); for (const s of raw) { const key = s.stationuuid || streamKey(streamUrl(s)); if (!unique.has(key)) unique.set(key, s); }
     const ranked = [...unique.values()].sort((a, b) => score(b) - score(a));
-    const direct = ranked.filter(s => usable(s)).slice(0, PER_CATEGORY_CANDIDATES), twins = ranked.filter(s => !usable(s)).slice(0, PER_CATEGORY_TWINS);
+    const limits = category.limits || {};
+    const direct = ranked.filter(s => usable(s)).slice(0, limits.direct || PER_CATEGORY_CANDIDATES), twins = ranked.filter(s => !usable(s)).slice(0, limits.twins || PER_CATEGORY_TWINS);
     const pinned = category.pin ? ranked.filter(s => category.pin.test(textOf(s))) : [];   // rare wanted words (e.g. "trapanele") are always tried, whatever their click count
     const chosen = new Map(); for (const s of [...direct, ...twins, ...pinned]) { const key = s.stationuuid || streamKey(streamUrl(s)); if (!chosen.has(key)) chosen.set(key, pinned.includes(s) ? { ...upgraded(s), __pin: true } : upgraded(s)); }
     picked.set(category.id, [...chosen.values()].sort((a, b) => score(b) - score(a)));
@@ -155,7 +160,7 @@ async function buildList(deps = {}) {
   for (const category of CATEGORIES) {
     const items = [], localKeys = new Set();
     const add = (station, foreign) => { const url = streamUrl(station), key = streamKey(url), nk = nameKey(station.name); if (localKeys.has(key) || localKeys.has('n:' + nk)) return false; localKeys.add(key); localKeys.add('n:' + nk); items.push(publicItem(station, foreign, category.id)); return true; };
-    for (const station of picked.get(category.id)) { if (items.length >= PER_CATEGORY_MAX) break; if (probed.get(streamUrl(station)) === true) add(station, false); }
+    for (const station of picked.get(category.id)) { if (items.length >= ((category.limits || {}).max || PER_CATEGORY_MAX)) break; if (probed.get(streamUrl(station)) === true) add(station, false); }
     const romanian = items.length;
     if (romanian < MIN_PER_CATEGORY && category.foreign.length && !overBudget()) {
       const foreign = (await fetchForeign(category)).filter(s => String(s.countrycode || '').toUpperCase() !== 'RO' && usable(s) && Number(s.votes) >= 20).sort((a, b) => (Number(b.votes) || 0) - (Number(a.votes) || 0));
@@ -205,5 +210,5 @@ exports.handler = async event => {
     return reply({ error: 'Radio list temporarily unavailable.' }, 503, { 'cache-control': 'no-store' });
   }
 };
-exports.buildList = buildList; exports.getList = getList; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
+exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
 exports.__resetMemory = () => { memory = null; building = null; };

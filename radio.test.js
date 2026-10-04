@@ -234,15 +234,15 @@ describe('styles of manele', () => {
     expect(byName['Plain Manele'].s).toBeUndefined();
     expect(manele(data).some(i => i.h)).toBe(false);
   });
-  test('TASTE ORDER: trap / techno first, new next, the rest, folk and ethno LAST; nothing removed; the quality order is kept inside a tier', async () => {
+  test('TASTE ORDER: trap / techno first, new next, manele, party-only (no word manele), folk and ethno LAST; nothing removed; the quality order is kept inside a tier', async () => {
     const data = await run([
       st({ name: 'Folk A', tags: 'folclor,petrecere', clickcount: 9000 }), st({ name: 'Etno B', tags: 'etno,manele', clickcount: 8000 }),
       st({ name: 'Plain C', tags: 'manele,petrecere', clickcount: 7000 }), st({ name: 'Plain D', tags: 'manele', clickcount: 6000 }),
       st({ name: 'New E', tags: 'manele noi', clickcount: 5000 }), st({ name: 'Old F', tags: 'manele vechi', clickcount: 4000 }),
       st({ name: 'Trap G', tags: 'manele,trap', clickcount: 100 }), st({ name: 'Club H', tags: 'manele,club', clickcount: 50 }),
-      st({ name: 'Club Etno I', tags: 'manele,club,etno', clickcount: 10 })
+      st({ name: 'Club Etno I', tags: 'manele,club,etno', clickcount: 10 }), st({ name: 'Party Z', tags: 'petrecere,populară', clickcount: 3000 })
     ]);
-    expect(manele(data).map(i => i.n)).toEqual(['Trap G', 'Club H', 'Club Etno I', 'New E', 'Plain C', 'Plain D', 'Old F', 'Folk A', 'Etno B']);
+    expect(manele(data).map(i => i.n)).toEqual(['Trap G', 'Club H', 'Club Etno I', 'New E', 'Plain C', 'Plain D', 'Old F', 'Party Z', 'Folk A', 'Etno B']);
   });
   test('the 🔥 top flag marks the three best by quality, not the first three after the taste order', async () => {
     const data = await run([st({ name: 'Plain Big', tags: 'manele', clickcount: 9000 }), st({ name: 'Plain Mid', tags: 'manele', clickcount: 8000 }), st({ name: 'Plain Two', tags: 'manele', clickcount: 7000 }), st({ name: 'Plain Four', tags: 'manele', clickcount: 6000 }), st({ name: 'Trap Tiny', tags: 'manele,trap', clickcount: 1 })]);
@@ -253,5 +253,28 @@ describe('styles of manele', () => {
   test('style codes exist only in MANELE: the same station in another category carries none', async () => {
     const data = await run([st({ name: 'Club Pop', tags: 'club,pop' })]);
     for (const c of data.cats) for (const i of c.items) expect(i.s).toBeUndefined();
+  });
+});
+
+describe('MANELE keeps every working manele station', () => {
+  const run = ro => radio.buildList({ fetchRo: async () => ro, fetchRoAll: async () => [], fetchForeign: async () => [], probe: async () => true, now: Date.now });
+  test('100 manele stations are all listed (no small cap), also the ones that are tagged for other genres too', async () => {
+    const plain = Array.from({ length: 100 }, (_, i) => st({ name: 'Manele Radio ' + i, tags: 'manele', clickcount: 1000 - i }));
+    const data = await run(plain);
+    expect(data.cats.find(c => c.id === 'manele').items).toHaveLength(100);
+  });
+  test('a station that says manele stays in MANELE even when two other genres score higher', async () => {
+    const busy = st({ name: 'Club House Manele', tags: 'manele,dance,club,house,deep house' });
+    expect(radio.topCategories(busy)).toContain('manele');
+    const data = await run([busy]);
+    expect(data.cats.find(c => c.id === 'manele').items.map(i => i.n)).toContain('Club House Manele');
+  });
+  test('explicit manele (word in tags or name) is flagged m; a party-only station is not', async () => {
+    const data = await run([st({ name: 'Real Manele', tags: 'manele' }), st({ name: 'Party Only', tags: 'petrecere,populară' })]);
+    const by = Object.fromEntries(data.cats.find(c => c.id === 'manele').items.map(i => [i.n, i]));
+    expect(by['Real Manele'].m).toBe(1); expect(by['Party Only'].m).toBeUndefined();
+  });
+  test('electro / house / minimal / techno manele count as the trap tier', () => {
+    for (const tags of ['manele,electro', 'manele,house', 'manele,minimal', 'manele,techno', 'manele,tehno']) expect(radio.styleOf(st({ tags }))).toContain('trap');
   });
 });
