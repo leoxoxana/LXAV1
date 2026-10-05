@@ -364,19 +364,21 @@
   // and the page is moved ONCE so the radio starts at the top of the screen; closing puts the page back exactly where it was.
   var savedY = null, closedGap = 0, fitY = null;
   var isPhone = function () { return window.matchMedia && matchMedia('(max-width: 700px)').matches; };
+  // the padlock (scroll lock) pins the page position: while the radio moves the page itself the lock is lifted for that one move and put back, so the pin takes the NEW position
+  function movePage(fn) { var locked = document.body.classList.contains('scroll-locked'); if (locked) document.body.classList.remove('scroll-locked'); try { fn(); } finally { if (locked) document.body.classList.add('scroll-locked'); } }
   function fitPanel(moveToo) {
     if (panel.hidden || !isPhone()) return;
     var vv = window.visualViewport, vh = vv ? vv.height : window.innerHeight, kofi = document.querySelector('.kofi-goal-bar');
     var head = panel.getBoundingClientRect().top - bar.getBoundingClientRect().top, below = kofi ? kofi.getBoundingClientRect().height + closedGap : 0;
     panel.style.maxHeight = Math.max(200, Math.floor(vh - 8 - head - below - 8)) + 'px';
-    if (moveToo) { window.scrollBy(0, bar.getBoundingClientRect().top - 8); fitY = window.scrollY; }
+    if (moveToo) { movePage(function () { window.scrollBy(0, bar.getBoundingClientRect().top - 8); }); fitY = window.scrollY; }
   }
   function openPanel(open) {
     if (open && panel.hidden && isPhone()) { var k = document.querySelector('.kofi-goal-bar'); closedGap = k ? Math.max(0, k.getBoundingClientRect().top - bar.getBoundingClientRect().bottom) : 0; savedY = window.scrollY; }
     var wasOpen = !panel.hidden;
     panel.hidden = !open; toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false'); titleBtn.setAttribute('aria-expanded', open ? 'true' : 'false'); bar.classList.toggle('open', open);
     if (open && !wasOpen) { fitPanel(true); window.requestAnimationFrame(function () { fitPanel(false); }); }
-    if (!open && wasOpen) { panel.style.maxHeight = ''; if (savedY !== null) { window.scrollTo(0, savedY); savedY = null; } }
+    if (!open && wasOpen) { panel.style.maxHeight = ''; if (savedY !== null) { var back = savedY; movePage(function () { window.scrollTo(0, back); }); savedY = null; } }
     toggleBtn.textContent = open ? '▴' : '▾';
     // the playing station is scrolled into view INSIDE the list only (scrollIntoView also moved the whole page)
     if (open) fetchList().then(function () { renderCats(); renderList(); var on = listEl.querySelector('.on'); if (on) listEl.scrollTop += on.getBoundingClientRect().top - listEl.getBoundingClientRect().top - (listEl.clientHeight - on.offsetHeight) / 2; if (!panel.hidden && fitY !== null && Math.abs(window.scrollY - fitY) < 4) fitPanel(true); }).catch(function () { /* message already shown */ });

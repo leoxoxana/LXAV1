@@ -72,8 +72,8 @@ const touchScreenOnly=()=>window.matchMedia&&window.matchMedia('(pointer:coarse)
 // PINCH ZOOM + LOCK: the lock blocks scrolling and zooming IN, but while the page is already zoomed in it must let the fingers pan and pinch back out - otherwise the page stays zoomed and cannot be moved ("everything breaks")
 const lxaZoomedIn=()=>!!(window.visualViewport&&window.visualViewport.scale>1.02);
 {const markZoom=()=>document.documentElement.classList.toggle('lxa-zoomed',lxaZoomedIn());markZoom();if(window.visualViewport)window.visualViewport.addEventListener('resize',markZoom)}
-document.addEventListener('touchmove',event=>{if(!lxaZoomedIn()&&document.body.classList.contains('scroll-locked')&&!(event.target.closest&&event.target.closest('.account-panel')))event.preventDefault()},{passive:false});
-document.addEventListener('wheel',event=>{if(!lxaZoomedIn()&&touchScreenOnly()&&document.body.classList.contains('scroll-locked')&&!(event.target.closest&&event.target.closest('.account-panel')))event.preventDefault()},{passive:false});
+document.addEventListener('touchmove',event=>{if(!lxaZoomedIn()&&document.body.classList.contains('scroll-locked')&&!(event.target.closest&&event.target.closest('.account-panel,.radio-panel')))event.preventDefault()},{passive:false});
+document.addEventListener('wheel',event=>{if(!lxaZoomedIn()&&touchScreenOnly()&&document.body.classList.contains('scroll-locked')&&!(event.target.closest&&event.target.closest('.account-panel,.radio-panel')))event.preventDefault()},{passive:false});
 document.addEventListener('gesturestart',event=>{if(!lxaZoomedIn()&&document.body.classList.contains('scroll-locked'))event.preventDefault()},{passive:false});
 
 const languageControl=$('#languageControl'),languageSelect=$('#language');let languageMenu;
@@ -104,7 +104,7 @@ updateLockState();
   const swallow=event=>{
     if(!isLocked()||lxaZoomedIn())return;
     // let the user still scroll inside genuinely scrollable panels
-    if(event.target.closest&&event.target.closest('.leaderboard-panel,#history,.account-panel'))return;
+    if(event.target.closest&&event.target.closest('.leaderboard-panel,#history,.account-panel,.radio-panel'))return;
     event.preventDefault();
   };
   window.addEventListener('wheel',swallow,{passive:false});
