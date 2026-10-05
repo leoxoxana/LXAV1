@@ -6029,4 +6029,7 @@ html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-hint:empty{display:
 html body:not(#_):not(#__):not(#___):not(#____) .account-edit-wrap{display:inline-flex;align-items:center;gap:10px}
 html body:not(#_):not(#__):not(#___):not(#____) .account-edit{flex:0 0 auto;width:34px;height:34px;border-radius:10px;border:1px solid rgba(120,160,255,.65);background:rgba(30,60,160,.55);color:#fff;font-size:15px;line-height:1;cursor:pointer;padding:0}
 html body:not(#_):not(#__):not(#___):not(#____) .account-safe-value-wrap{display:inline-flex;align-items:center;gap:8px}
+/* KONTO window: the eye and the pencil are small (28 px, 13 px symbol) */
+html body:not(#_):not(#__):not(#___):not(#____) .account-panel-card .account-safe-toggle,html body:not(#_):not(#__):not(#___):not(#____) .account-panel-card .account-edit{width:28px!important;height:28px!important;min-width:0!important;min-height:0!important;padding:0!important;font-size:13px!important;line-height:1!important;border-radius:8px!important}
+html body:not(#_):not(#__):not(#___):not(#____) .account-panel-card .account-edit-wrap,html body:not(#_):not(#__):not(#___):not(#____) .account-panel-card .account-safe-value-wrap{gap:6px!important}
 
