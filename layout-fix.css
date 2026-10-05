@@ -6022,4 +6022,5 @@ html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li strong{text
 html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.lb-headrow{font-size:9px!important;letter-spacing:1.2px;opacity:.8;border-bottom:1px solid rgba(190,160,255,.35)!important}
 html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.lb-headrow *{font:inherit!important;color:#cfd8ff!important;text-shadow:none!important;letter-spacing:inherit!important;text-align:inherit}
 html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.lb-headrow .lb-lvl{text-align:center}html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.lb-headrow strong{text-align:right}
-
+/* phones: the open radio panel has a JS-set maximum height (fits the screen with the Ko-fi strip) and scrolls inside itself */
+html body:not(#_):not(#__):not(#___):not(#____) .radio-panel{overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}

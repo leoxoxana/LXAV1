@@ -303,9 +303,11 @@
   var say = function (key, extra) { addMsg.textContent = key ? (extra || '') + L()[key] : ''; };
   var hostOf = function (u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
   var WHY = { 'bad-frequency': ['mBadF', '⚠️ '], 'bad-url': ['mBad', '⚠️ '], blocked: ['mBlocked', '⛔ '], unreachable: ['mUnreachable', '❌ '], 'http-only': ['mHttpOnly', '🔓 '], 'not-audio': ['mNotAudio', '🎧 '], html: ['mHtml', '🌐 '], 'no-data': ['mNoData', '🔇 '], disconnects: ['mDisc', '✂️ '], unstable: ['mUnstable', '〰️ '], timeout: ['mTimeout', '⏱️ '], limit: ['mLimit', '⏳ '] };
+  function refitPanel() { if (!panel.hidden) fitPanel(true); }   // after the add / find box opens or closes the panel changes height: fit it to the screen again
   function openAdd(open, url) {
     addBox.hidden = !open; addBtn.setAttribute('aria-expanded', open ? 'true' : 'false'); addBtn.classList.toggle('on', open);
     if (open) { if (panel.hidden) openPanel(true); if (typeof url === 'string') addUrl.value = url; say(''); try { addUrl.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    refitPanel();
   }
   // The server needs a moment to find the stream, and a browser (iPhone above all) only lets an audio element start inside the tap that asked for it: so the element is "unlocked" by the tap with 0.4 s of
   // silence (a file of this site), and the real stream is started on the same element afterwards. If nothing plays in the end the element is put back as it was.
@@ -358,12 +360,29 @@
   }
 
   // ---- panel
+  // PHONES: an open panel must fit the visible screen together with the Ko-fi strip under it. The panel gets a maximum height (screen - controls row - Ko-fi strip), scrolls inside itself,
+  // and the page is moved ONCE so the radio starts at the top of the screen; closing puts the page back exactly where it was.
+  var savedY = null, closedGap = 0, fitY = null;
+  var isPhone = function () { return window.matchMedia && matchMedia('(max-width: 700px)').matches; };
+  function fitPanel(moveToo) {
+    if (panel.hidden || !isPhone()) return;
+    var vv = window.visualViewport, vh = vv ? vv.height : window.innerHeight, kofi = document.querySelector('.kofi-goal-bar');
+    var head = panel.getBoundingClientRect().top - bar.getBoundingClientRect().top, below = kofi ? kofi.getBoundingClientRect().height + closedGap : 0;
+    panel.style.maxHeight = Math.max(200, Math.floor(vh - 8 - head - below - 8)) + 'px';
+    if (moveToo) { window.scrollBy(0, bar.getBoundingClientRect().top - 8); fitY = window.scrollY; }
+  }
   function openPanel(open) {
+    if (open && panel.hidden && isPhone()) { var k = document.querySelector('.kofi-goal-bar'); closedGap = k ? Math.max(0, k.getBoundingClientRect().top - bar.getBoundingClientRect().bottom) : 0; savedY = window.scrollY; }
+    var wasOpen = !panel.hidden;
     panel.hidden = !open; toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false'); titleBtn.setAttribute('aria-expanded', open ? 'true' : 'false'); bar.classList.toggle('open', open);
+    if (open && !wasOpen) { fitPanel(true); window.requestAnimationFrame(function () { fitPanel(false); }); }
+    if (!open && wasOpen) { panel.style.maxHeight = ''; if (savedY !== null) { window.scrollTo(0, savedY); savedY = null; } }
     toggleBtn.textContent = open ? '▴' : '▾';
     // the playing station is scrolled into view INSIDE the list only (scrollIntoView also moved the whole page)
-    if (open) fetchList().then(function () { renderCats(); renderList(); var on = listEl.querySelector('.on'); if (on) listEl.scrollTop += on.getBoundingClientRect().top - listEl.getBoundingClientRect().top - (listEl.clientHeight - on.offsetHeight) / 2; }).catch(function () { /* message already shown */ });
+    if (open) fetchList().then(function () { renderCats(); renderList(); var on = listEl.querySelector('.on'); if (on) listEl.scrollTop += on.getBoundingClientRect().top - listEl.getBoundingClientRect().top - (listEl.clientHeight - on.offsetHeight) / 2; if (!panel.hidden && fitY !== null && Math.abs(window.scrollY - fitY) < 4) fitPanel(true); }).catch(function () { /* message already shown */ });
   }
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', function () { fitPanel(false); });   // keyboard / browser bars: the panel follows the visible height
+  window.addEventListener('orientationchange', function () { setTimeout(function () { fitPanel(false); }, 300); });
   function viewButton(which) { view = view === which ? 'cat' : which; searchEl.value = ''; if (data) { renderCats(); renderList(); } else fetchList().then(function () { renderCats(); renderList(); }).catch(function () { /* shown */ }); }
 
   // 🚩 = "this station does not work for me" (also: it plays but is silent / the wrong thing). Reports it, dims it here for 24 h and moves on to the next one in the direction the listener was going.
@@ -453,7 +472,7 @@
         myCc = r.mine || ''; try { var saved = localStorage.getItem('lxa-radio-cc'); fcc.value = saved !== null ? saved : myCc; } catch (e) { fcc.value = myCc; } if (fcc.value !== (saved || myCc)) fcc.value = '';
       }).catch(function () { loaded = false; say(X().fail); });
     }
-    function openFind(open) { fbox.hidden = !open; fb.setAttribute('aria-expanded', open ? 'true' : 'false'); fb.classList.toggle('on', open); if (open) { if (panel.hidden) openPanel(true); loadCountries(); say(''); try { ff.focus({ preventScroll: true }); } catch (e) { /* ignore */ } } else { stopScan(); if (view === 'find') { view = 'cat'; if (data) { renderCats(); renderList(); } } } }
+    function openFind(open) { fbox.hidden = !open; fb.setAttribute('aria-expanded', open ? 'true' : 'false'); fb.classList.toggle('on', open); if (open) { if (panel.hidden) openPanel(true); loadCountries(); say(''); try { ff.focus({ preventScroll: true }); } catch (e) { /* ignore */ } } else { stopScan(); if (view === 'find') { view = 'cat'; if (data) { renderCats(); renderList(); } } } refitPanel(); }
     function stopScan() { clearTimeout(scanTimer); scanTimer = 0; sgo.textContent = '▶'; sgo.setAttribute('aria-label', 'Scan'); }
     function remember() { try { localStorage.setItem('lxa-radio-cc', fcc.value); } catch (e) { /* ignore */ } }
     function results(items) { findItems = items.map(function (i) { var o = cleanItem(i); if (o) { o.f = i.f; o.cc = i.cc || ''; } return o; }).filter(Boolean); show(); }
