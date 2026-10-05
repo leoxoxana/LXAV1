@@ -1354,7 +1354,7 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
     const title = $('#leaderboardTitle'), difficulty = $('#leaderboardDifficulty'), tabs = $('#leaderboardTabs'), rows = $('#leaderboardRows'), position = $('#leaderboardPosition');
     if (!title || !tabs) return;
     title.textContent = T118('leaderboard');
-    const hint = $('#leaderboardHint'); if (hint) hint.textContent = ({ de: 'Rang = zuerst WILD-LVL, dann dein Geld (Guthaben + Bank)', ro: 'Loc = întâi LVL WILD, apoi banii tăi (sold + bancă)', en: 'Rank = WILD LVL first, then your money (balance + bank)' }[lang] || '');
+    const hint = $('#leaderboardHint'); if (hint) hint.textContent = '';   // no explanation text under the board (removed on request)
     difficulty.textContent = `${level}/3`;
     tabs.innerHTML = Array.from({ length: 3 }, (_, index) => `<button class="${index + 1 === level ? 'active' : ''}" data-level="${index + 1}">${index + 1}/3</button>`).join('');
     tabs.querySelectorAll('button').forEach(tab => tab.onclick = () => { chance = Number(tab.dataset.level) - 1; gameState.difficulty = chance + 1; persist(); refreshChance(); renderLeaderboard(); });

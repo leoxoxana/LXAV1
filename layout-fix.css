@@ -6024,3 +6024,4 @@ html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.lb-headrow 
 html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.lb-headrow .lb-lvl{text-align:center}html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-rows li.lb-headrow strong{text-align:right}
 /* phones: the open radio panel has a JS-set maximum height (fits the screen with the Ko-fi strip) and scrolls inside itself */
 html body:not(#_):not(#__):not(#___):not(#____) .radio-panel{overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+html body:not(#_):not(#__):not(#___):not(#____) .leaderboard-hint:empty{display:none!important;margin:0!important;padding:0!important;border:0!important}
