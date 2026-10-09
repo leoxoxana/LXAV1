@@ -495,7 +495,7 @@ const accountHandler = async event => {
         try { const node = rememberKey(defaults(acc), key); await save(node, true); } catch (error) { /* leave as is */ }
       }
       accounts = await getAccounts();
-      const players = Object.values(accounts).map(acc => ({ id: acc.id, name: acc.name, lastActive: acc.updatedAt || 0 })).sort((a, b) => number(b.lastActive) - number(a.lastActive));
+      const players = Object.values(accounts).map(acc => ({ id: acc.id, name: acc.name, lastActive: acc.updatedAt || 0 })).sort((a, b) => number(a.id) - number(b.id) || String(a.name).localeCompare(String(b.name)));
       return json({ players });
     }
     // Renaming/re-IDing/re-passwording a player never touches its balance,

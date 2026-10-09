@@ -74,7 +74,7 @@ describe('account node keys', () => {
     storage.__put('account:12', player(12, 'Bob', { updatedAt: 7 }));
     storage.__put('account:13', player(13, 'Cleo', { updatedAt: 9 }));
     const res = await call('list-players', { id: 1, safeWord: 'pw' });
-    expect(res.players.map(p => p.id).sort((a, b) => a - b)).toEqual([1, 12, 13]);
+    expect(res.players.map(p => p.id)).toEqual([1, 12, 13]);
     expect(Object.keys(storage.__accounts()).sort()).toEqual(['1 : Admin', '12 : Bob', '13 : Cleo']);
     expect(storage.__accounts()['12 : Bob'].updatedAt).toBe(7);
   });
