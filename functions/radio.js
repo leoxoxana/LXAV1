@@ -3,7 +3,7 @@
 // Source: Radio Browser (community directory, no key). Pipeline: Romanian stations per category (tags + name), HTTPS + MP3/AAC + direct url_resolved only,
 // de-duplicated, a REAL reachability probe (first bytes of audio), then - only where Romania has too few working stations - a few top-voted foreign ones.
 // The result is cached in memory and in Firebase (meta/radio), so a Radio Browser outage never empties the player: the last good list is served instead.
-const crypto = require('crypto'), fs = require('fs'), reports = require('./radio-reports'), custom = require('./radio-custom'), validate = require('./radio-validate'), flagships = require('./radio-flagships'), artists = require('./radio-artists'), { popularity, collectListeners } = require('./radio-popularity');
+const crypto = require('crypto'), fs = require('fs'), reports = require('./radio-reports'), custom = require('./radio-custom'), validate = require('./radio-validate'), flagships = require('./radio-flagships'), { popularity, collectListeners } = require('./radio-popularity');
 // Version of the list builder = hash of this very file. A list stored (memory / Firebase) by a different version is rebuilt on the next request, so a deploy never keeps serving the list
 // of the previous code for the 12 h freshness window (that is exactly what kept 39 manele stations on the live site after the fix was deployed).
 const BUILDER_VERSION = (() => { try { return crypto.createHash('sha1').update(fs.readFileSync(__filename)).digest('hex').slice(0, 12); } catch (error) { return 'unknown'; } })();
@@ -218,32 +218,6 @@ const publicItem = (station, foreign, categoryId) => {
   return item;
 };
 
-// TASTE STEP (owner's artist list): a station that says "manele" in its tags / name but is filed as folk / popular / ethno (it also tags itself populara / folclor / etno) is a MIXED station.
-// Every build reads the title that plays now (one more sample per build, the same title twice counts once) and keeps the count in the stored list (data.taste, only for such stations).
-// It is promoted to MANELE after 3+ samples when at least 2 of them, and at least half, are manele artists (radio-artists.js). A station that falls back below that goes back to ETNO.
-const TASTE_MIN = 3, TASTE_HITS = 2, TASTE_SHARE = 0.5, TASTE_CAP = 12, TASTE_MAX_STATIONS = 40;
-async function tasteStep(items, stationOf, deps, overBudget) {
-  const previous = (deps.previous && deps.previous.taste) || {}, ledger = {};
-  const readIcy = deps.readIcy || (deps.probe ? async () => ({ ok: false }) : validate.readIcy);
-  const mixed = items.filter(item => { const station = stationOf.get(item) || {}; return notManele(item) && /\bmanele|\bmanea\b|trapanel/i.test(`${station.tags || ''} ${station.name || ''}`) && !OWNER_ETNO.test(String(item.n || '').trim()); }).slice(0, TASTE_MAX_STATIONS);
-  const deadline = Date.now() + 15000; let next = 0;
-  await Promise.all(Array.from({ length: 10 }, async () => {
-    while (next < mixed.length) {
-      const item = mixed[next++], key = streamKey(item.u), old = previous[key] || { n: 0, h: 0, last: '' };
-      let entry = { n: old.n, h: old.h, last: old.last };
-      if (!overBudget() && Date.now() < deadline) {
-        try {
-          const icy = await readIcy(item.u, { timeoutMs: 4500 });
-          if (icy && icy.ok && icy.title && icy.title !== old.last) { entry = { n: old.n + 1, h: old.h + (artists.artistIn(icy.title) ? 1 : 0), last: icy.title.slice(0, 80) }; if (entry.n > TASTE_CAP) entry = { n: Math.round(entry.n / 2), h: Math.round(entry.h / 2), last: entry.last }; }
-        } catch (error) { /* unknown stays unknown */ }
-      }
-      ledger[key] = entry;
-      if (entry.n >= TASTE_MIN && entry.h >= TASTE_HITS && entry.h / entry.n >= TASTE_SHARE) { item.m = 1; item.s = (item.s || []).filter(style => style !== 'folk' && style !== 'etno'); }
-    }
-  }));
-  return { ledger };
-}
-
 // deps are injectable for tests
 async function buildList(deps = {}) {
   const fetchRo = deps.fetchRo || defaultFetchRo, fetchRoAll = deps.fetchRoAll || defaultFetchRoAll, fetchForeign = deps.fetchForeign || defaultFetchForeign, probe = deps.probe || probeStream, now = deps.now || Date.now;
@@ -295,7 +269,7 @@ async function buildList(deps = {}) {
   // wanted (pinned) stations first, with the full timeout and only a few at a time. A station can only go from failed to working here, never the other way.
   const failed = [...new Map([...picked.values()].flat().filter(s => probed.get(streamUrl(s)) === false).map(s => [streamUrl(s), s])).values()].sort((a, b) => (b.__pin ? 1 : 0) - (a.__pin ? 1 : 0) || score(b) - score(a)).slice(0, SECOND_CHANCE_MAX);
   let again = 0; await Promise.all(Array.from({ length: 8 }, async () => { while (again < failed.length && !overBudget()) { const s = failed[again++]; if (await probe(streamUrl(s), PROBE_TIMEOUT_MS)) probed.set(streamUrl(s), true); } }));
-  const result = []; let etnoItems = [], tasteOut = {}; const stationOf = new Map();   // public item -> the directory record it came from (votes, clicks, bitrate for the popularity order)
+  const result = []; let etnoItems = []; const stationOf = new Map();   // public item -> the directory record it came from (votes, clicks, bitrate for the popularity order)
   const collect = deps.collectListeners || (deps.probe ? async () => new Map() : collectListeners);   // (tests that inject their own probe never touch the network here)
   for (const category of CATEGORIES) {
     if (category.derived) {   // ETNO = what the MANELE pipeline found that is not manele (it comes right after MANELE in CATEGORIES)
@@ -323,7 +297,6 @@ async function buildList(deps = {}) {
       // big trap station are both near the top while a tiny trap station no longer beats a station with thousands of listeners. The flame = the three most popular manele.
       const listeners = overBudget() ? new Map() : await collect(items.map(item => item.u)).catch(() => new Map());
       const base = item => popularity(stationOf.get(item) || {}, listeners.get(item.u)), bonus = item => { const styles = item.s || []; return styles.includes('trap') ? STYLE_BONUS.trap : styles.includes('new') ? STYLE_BONUS.new : 0; };
-      tasteOut = (await tasteStep(items, stationOf, deps, overBudget)).ledger;   // evidence from the titles: mixed stations that mostly play manele artists are promoted
       const real = items.filter(item => !notManele(item)).sort((a, b) => (base(b) + bonus(b)) - (base(a) + bonus(a)));
       real.filter(item => item.cc === 'RO').slice(0, 3).forEach(item => { item.top = 1; });
       etnoItems = items.filter(notManele).sort((a, b) => base(b) - base(a)).slice(0, ETNO_MAX); etnoItems.forEach(item => { delete item.s; delete item.top; delete item.m; });
@@ -365,7 +338,7 @@ async function buildList(deps = {}) {
   const owner = new Map();
   result.forEach((cat, index) => cat.items.forEach(item => { for (const key of [streamKey(item.u), 'n:' + nameKey(item.n)]) { const held = owner.get(key), score = fit(cat, item); if (!held || score > held.score) owner.set(key, { index, score }); } }));
   result.forEach((cat, index) => { cat.items = cat.items.filter(item => owner.get(streamKey(item.u)).index === index && owner.get('n:' + nameKey(item.n)).index === index); });
-  return { updatedAt: now(), cats: result, taste: tasteOut };
+  return { updatedAt: now(), cats: result };
 }
 
 // RE-CHECK: a station that worked at build time can die hours later (6 of 220 on the live list within a day). Every few hours the listed stations are probed again (the same strict two-client probe,
@@ -401,7 +374,7 @@ async function getList({ refresh = false, recheck = false, storage, build = buil
   }
   if (!needs) return { data: memory, stale: false };
   try {
-    if (!building) building = build({ previous: memory }).then(async data => { if (total(data) < 10) throw new Error('too few stations'); data.v = BUILDER_VERSION; memory = data; await saveStored(storage, data); return data; }).finally(() => { building = null; });
+    if (!building) building = build().then(async data => { if (total(data) < 10) throw new Error('too few stations'); data.v = BUILDER_VERSION; memory = data; await saveStored(storage, data); return data; }).finally(() => { building = null; });
     return { data: await building, stale: false };
   } catch (error) {
     if (memory) return { data: memory, stale: true };   // Radio Browser down: keep serving the last good list
@@ -428,7 +401,7 @@ async function servingState(storage, now = Date.now()) {
 const stripMarks = item => { const copy = { ...item }; delete copy.top; delete copy.s; delete copy.m; return copy; };
 const servedList = (data, given) => {
   const state = given instanceof Set ? { hidden: given, moves: new Map(), favs: new Map() } : given;
-  const rest = { ...data }; delete rest.dropped; delete rest.taste;   // `dropped` is for the admin, `taste` (artist samples) is for the next build; players need neither
+  const rest = { ...data }; delete rest.dropped;   // `dropped` is for the admin, players do not need it
   const shown = item => !blockedUrl(item.u) && !state.hidden.has(reports.radioKey(item.u));   // blocked hosts also leave a list that was built before the block existed
   let cats = rest.cats.map(cat => ({ ...cat, items: cat.items.filter(shown) }));
   // STATIONS OF THE PLAYERS the owner approved: put at the top of the category he chose (any of the 12); a station with the same address that is in the list already is replaced by this one
@@ -634,5 +607,5 @@ exports.handler = async event => {
     return reply({ error: 'Radio list temporarily unavailable.' }, 503, { 'cache-control': 'no-store' });
   }
 };
-exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.stationIndex = stationIndex; exports.MOVE_TARGETS = MOVE_TARGETS; exports.CUSTOM_TARGETS = CUSTOM_TARGETS; exports.__resetHidden = () => { servingCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.OWNER_NOT_MANELE = OWNER_NOT_MANELE; exports.OWNER_ETNO = OWNER_ETNO; exports.tasteStep = tasteStep; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
+exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.stationIndex = stationIndex; exports.MOVE_TARGETS = MOVE_TARGETS; exports.CUSTOM_TARGETS = CUSTOM_TARGETS; exports.__resetHidden = () => { servingCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.OWNER_NOT_MANELE = OWNER_NOT_MANELE; exports.OWNER_ETNO = OWNER_ETNO; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
 exports.isEnglishish = isEnglishish; exports.isLangFree = isLangFree; exports.isWorldMusic = isWorldMusic; exports.genreOf = genreOf; exports.GLOBAL_GENRES = GLOBAL_GENRES; exports.hasMusicTag = hasMusicTag; exports.brandOf = brandOf; exports.isEnglish = isEnglish; exports.globalScore = globalScore; exports.knownIndex = knownIndex; exports.healthSweep = healthSweep; exports.playerView = playerView; exports.__resetMemory = () => { memory = null; building = null; };
