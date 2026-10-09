@@ -495,7 +495,7 @@ const accountHandler = async event => {
         try { const node = rememberKey(defaults(acc), key); await save(node, true); } catch (error) { /* leave as is */ }
       }
       accounts = await getAccounts();
-      const players = Object.values(accounts).map(acc => ({ id: acc.id, name: acc.name, lastActive: acc.updatedAt || 0 })).sort((a, b) => number(a.id) - number(b.id) || String(a.name).localeCompare(String(b.name)));
+      const players = Object.values(accounts).map(acc => ({ id: acc.id, name: acc.name, role: acc.role === 'admin' ? 'admin' : 'user', lastActive: acc.updatedAt || 0 })).sort((a, b) => number(a.id) - number(b.id) || String(a.name).localeCompare(String(b.name)));
       return json({ players });
     }
     // Renaming/re-IDing/re-passwording a player never touches its balance,
@@ -543,6 +543,17 @@ const accountHandler = async event => {
         if (changed) await saveLeaderboard(boards);
       }
       return json({ player: { id: updated.id, name: updated.name, lastActive: updated.updatedAt } });
+    }
+    if (action === 'admin-set-role') {
+      const admin = await read(input.id); if (!admin) return json({ error: 'ID not found.' }, 404);
+      if (!isAdminAccount(admin)) return json({ error: 'Not authorized.' }, 403);
+      { const denied = await checkSafeWord(admin, input.safeWord); if (denied) return denied; }
+      const target = await read(input.playerId); if (!target) return json({ error: 'Player not found.' }, 404);
+      const makeAdmin = input.admin === true || input.admin === 'true';
+      if (!makeAdmin && Number(target.id) === Number(admin.id)) return json({ error: 'Cannot remove your own admin role.' }, 400);
+      const updated = rememberKey({ ...target, role: makeAdmin ? 'admin' : 'user' }, target.__key);
+      await save(updated);
+      return json({ player: { id: updated.id, name: updated.name, role: updated.role } });
     }
     if (action === 'admin-delete-player') {
       const admin = await read(input.id); if (!admin) return json({ error: 'ID not found.' }, 404);

@@ -100,4 +100,17 @@ describe('account node keys', () => {
     expect(ok.error).toBeUndefined();
     expect(ok.account).toBeDefined();
   });
+  test('admin-set-role: only an admin with the right password grants or removes admin; own role cannot be removed', async () => {
+    const { storage, call } = setup();
+    storage.__put('1 : Leo', player(1, 'Leo', { role: 'admin' }));
+    storage.__put('12 : Bob', player(12, 'Bob'));
+    storage.__put('13 : Cleo', player(13, 'Cleo'));
+    expect((await call('admin-set-role', { id: 12, safeWord: 'pw', playerId: 13, admin: true })).error).toBe('Not authorized.');
+    expect((await call('admin-set-role', { id: 1, safeWord: 'wrong', playerId: 12, admin: true })).error).toBeTruthy();
+    expect((await call('admin-set-role', { id: 1, safeWord: 'pw', playerId: 12, admin: true })).player.role).toBe('admin');
+    expect(storage.__accounts()['12 : Bob'].role).toBe('admin');
+    expect((await call('list-players', { id: 1, safeWord: 'pw' })).players.find(p => p.id === 12).role).toBe('admin');
+    expect((await call('admin-set-role', { id: 1, safeWord: 'pw', playerId: 1, admin: false })).error).toMatch(/own admin/);
+    expect((await call('admin-set-role', { id: 1, safeWord: 'pw', playerId: 12, admin: false })).player.role).toBe('user');
+  });
 });
