@@ -48,7 +48,7 @@
       "env": { "browser": true, "es2021": true }
     },
     {
-      "files": ["header-fit.js", "boot-wild-preload.js", "sw-register.js", "radio.js", "admin-radio.js"],
+      "files": ["header-fit.js", "boot-wild-preload.js", "sw-register.js", "radio.js", "admin-radio.js", "howto.js"],
       "env": { "browser": true, "es2021": true },
       "globals": { "LXASpinButton": "readonly", "lang": "readonly", "lxaRequest": "readonly", "lxaAccount": "readonly", "lxaToken": "readonly", "renderAccountPanel": "readonly", "lxaRadioCache": "writable", "lxaConfirm": "readonly" }
     },
