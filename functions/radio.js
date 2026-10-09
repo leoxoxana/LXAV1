@@ -232,6 +232,7 @@ async function buildList(deps = {}) {
   const picked = new Map();   // category id -> stations (raw), best first
   // the directory queries of all categories run AT ONCE (they were one after the other: ~10 s of the 45 s the function may run)
   const fetched = new Map(await Promise.all(CATEGORIES.filter(category => !category.derived).map(async category => [category.id, await fetchRo(category)])));
+  if (!deps.fetchRo) { const have = new Set((fetched.get('manele') || []).map(s => streamKey(streamUrl(s)))); fetched.set('manele', [...(fetched.get('manele') || []), ...require('./radio-manele-picks').records().filter(p => !have.has(streamKey(streamUrl(p))))]); }   // verified https addresses of manele stations the directory only has as http (see radio-manele-picks.js)
   for (const category of CATEGORIES) {
     if (category.derived) continue;
     const raw = [...(fetched.get(category.id) || []).filter(s => String(s.countrycode || 'RO').toUpperCase() === 'RO'), ...roAll].filter(s => (usable(s) || upgradable(s)) && topCategories(s).includes(category.id) && !(category.id === 'manele' && OWNER_NOT_MANELE.test(s.name || '')));
