@@ -25,7 +25,7 @@ const BUILD_BUDGET_MS = 32000;               // the function may run 60 s (verce
 
 // not = stations that are about something else (news, talk, religion) never enter a music category
 const CATEGORIES = [
-  { id: 'manele', emoji: '🔥', label: 'MANELE', limits: { direct: 120, twins: 80, max: 120 }, pin: /trapanel|\btrap\b|t[e]?hno|techno|\belectro|\bhouse\b|minimal|\bclub\b|hip[ -]?hop|\bdj\b|remix|manele noi|manele vechi/i, re: /manele|manea|trapanel|petrecere|lautaresc|lăutăresc|taraf|folclor|folcloric|muzic[aă] popular[aă]|\betno\b|popular[aă]|\bfolk\b/i, queries: ['manele', 'petrecere', 'trapanele', 'lautareasca', 'folclor', 'populara', 'etno'], foreign: [] },
+  { id: 'manele', emoji: '🔥', label: 'MANELE', limits: { direct: 120, twins: 80, max: 120 }, pin: /trapanel|\btrap\b|t[e]?hno|techno|\belectro|\bhouse\b|minimal|\bclub\b|hip[ -]?hop|\bdj\b|remix|manele noi|manele vechi/i, re: /\bmanele|\bmanea\b|trapanel|petrecere|lautaresc|lăutăresc|taraf|folclor|folcloric|muzic[aă] popular[aă]|\betno\b|popular[aă]|\bfolk\b/i, queries: ['manele', 'petrecere', 'trapanele', 'lautareasca', 'folclor', 'populara', 'etno'], foreign: [] },
   // ETNO is derived: the stations of the MANELE pipeline that are not manele (folk / popular / ethno / party-only "populara"), see buildList. TOP (the players' favourites) is added when the list is served.
   { id: 'etno', emoji: '🎻', label: 'ETNO', derived: true },
   { id: 'rap', emoji: '🎤', label: 'RAP', re: /\brap\b|hip[ -]?hop|\btrap\b|urban|\br&b\b/i, queries: ['rap', 'hip hop', 'trap'], foreign: ['hip hop', 'rap'] },
@@ -36,7 +36,7 @@ const CATEGORIES = [
   { id: 'rock', emoji: '🎸', label: 'ROCK', re: /rock|alternative|\bmetal\b|punk|grunge/i, queries: ['rock', 'alternative', 'metal'], foreign: ['rock', 'classic rock'] },
   { id: 'chill', emoji: '🌴', label: 'CHILL', re: /chill|lounge|ambient|relax|downtempo|\bjazz\b|easy listening/i, queries: ['chillout', 'lounge', 'ambient', 'relax', 'jazz'], foreign: ['chillout', 'lounge'] },
   // the most listened music that was missing: 80s / 90s / oldies / classic hits (manele "vechi" and folk are not retro)
-  { id: 'retro', emoji: '🕰', label: 'RETRO', re: /\b(70|80|90)'?s\b|oldies|retro|\bdisco\b|classic hits|\bgolden\b|nostalg|anii (70|80|90)/i, not: /manele|manea|trapanel|petrecere|folclor|popular/i, queries: ['oldies', '80s', '90s', '70s', 'retro', 'classic hits', 'disco'], foreign: ['oldies', '80s', '90s'] }
+  { id: 'retro', emoji: '🕰', label: 'RETRO', re: /\b(70|80|90)'?s\b|oldies|retro|\bdisco\b|classic hits|\bgolden\b|nostalg|anii (70|80|90)/i, not: /\bmanele|\bmanea\b|trapanel|petrecere|folclor|popular/i, queries: ['oldies', '80s', '90s', '70s', 'retro', 'classic hits', 'disco'], foreign: ['oldies', '80s', '90s'] }
 ];
 const NOT_MUSIC = /\bnews\b|\btalk\b|religio|cre[sș]tin|christian|gospel|\bsport|podcast|stiri|știri|biseric/i;
 
@@ -58,9 +58,11 @@ const FOLK_TAGS = ['folclor', 'muzică populară', 'muzica populara', 'folclor r
 const isFolk = station => { const tags = String(station.tags || '').toLowerCase().split(',').map(t => t.trim()).filter(Boolean); if (tags.length > 8 && !/folclor|folcloric/i.test(station.name || '')) return false;   // multi-genre stations are not folk stations (unless the name says folclor)
   return tags.some(t => FOLK_TAGS.includes(t)) || /folclor|folcloric/i.test(station.name || '') || (tags.some(t => t === 'populară' || t === 'populara') && /\bpopular\b/i.test(station.name || '')); };
 // OWNER DECISION: stations that were heard playing something else although they are tagged manele (checked on the titles the stream sends); they never go to MANELE
+// OWNER DECISION: popular music although the name says manele (heard by the owner; the titles are Petrece Romaneste, Marian Cozma ...): listed in ETNO
+const OWNER_ETNO = /^radio manele petrecere$/i;
 const OWNER_NOT_MANELE = /^dejavumusic\s*-\s*radio dejavu|^clasic radio_indie|^center deejay/i;
 // "trap" (electro / house / club / dj ...) counts as a manele style only when the station says manele / manea / trapanele somewhere (tag or name): "indie electronic" or a plain DJ radio is not a trap manele
-const styleOf = station => { const text = `${station.tags || ''} ${station.name || ''}`, out = Object.keys(STYLE_RES).filter(key => STYLE_RES[key].test(text) && (key !== 'trap' || /manele|manea|trapanel/i.test(text))); if (isFolk(station)) out.push('folk'); return out; };
+const styleOf = station => { if (OWNER_ETNO.test(String(station.name || '').trim())) return ['etno']; const text = `${station.tags || ''} ${station.name || ''}`, out = Object.keys(STYLE_RES).filter(key => STYLE_RES[key].test(text) && (key !== 'trap' || /\bmanele|\bmanea\b|trapanel/i.test(text))); if (isFolk(station)) out.push('folk'); return out; };
 const cleanName = value => String(value || '').replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 48);
 const isHttps = url => /^https:\/\/[^\s]+$/i.test(String(url || ''));
 const codecOf = station => { const c = String(station.codec || '').toUpperCase(); return c.startsWith('AAC') ? 'AAC' : c === 'MP3' ? 'MP3' : ''; };
@@ -99,7 +101,7 @@ function categoryScore(category, station) {
 // at most two categories per station (a station tagged house + techno + dance + chill + pop is not shown in five lists)
 // a station that says manele (tag or name) is always listed in MANELE, whatever else it is tagged (dance, house, club, ...), plus its best other category
 // the NAME saying manele is enough; the TAG alone is not when the same station also tags itself populara / folclor / folk / etno (many local stations stick "manele,petrecere,populara" on a popular-music programme: those go to ETNO)
-const explicitManele = station => /manele|manea|trapanel/i.test(station.name || '') || (/manele|manea|trapanel/i.test(station.tags || '') && !/popular|folclor|folk|etno|ethno|lautar/i.test(station.tags || ''));
+const explicitManele = station => !OWNER_ETNO.test(String(station.name || '').trim()) && (/\bmanele|\bmanea\b|trapanel/i.test(station.name || '') || (/\bmanele|\bmanea\b|trapanel/i.test(station.tags || '') && !/popular|folclor|folk|etno|ethno|lautar/i.test(station.tags || '')));
 const topCategories = station => explicitManele(station) && inCategory(CATEGORIES[0], station) ? ['manele', ...topCategoriesBase(station).filter(id => id !== 'manele').slice(0, 1)] : topCategoriesBase(station);
 const topCategoriesBase = station => CATEGORIES.filter(category => !category.derived).map(category => ({ id: category.id, points: categoryScore(category, station) })).filter(item => item.points > 0).sort((a, b) => b.points - a.points).filter((item, index) => index === 0 || (index === 1 && item.points >= 2)).map(item => item.id);
 
@@ -604,5 +606,5 @@ exports.handler = async event => {
     return reply({ error: 'Radio list temporarily unavailable.' }, 503, { 'cache-control': 'no-store' });
   }
 };
-exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.stationIndex = stationIndex; exports.MOVE_TARGETS = MOVE_TARGETS; exports.CUSTOM_TARGETS = CUSTOM_TARGETS; exports.__resetHidden = () => { servingCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.OWNER_NOT_MANELE = OWNER_NOT_MANELE; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
+exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.stationIndex = stationIndex; exports.MOVE_TARGETS = MOVE_TARGETS; exports.CUSTOM_TARGETS = CUSTOM_TARGETS; exports.__resetHidden = () => { servingCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.OWNER_NOT_MANELE = OWNER_NOT_MANELE; exports.OWNER_ETNO = OWNER_ETNO; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
 exports.isEnglishish = isEnglishish; exports.isLangFree = isLangFree; exports.isWorldMusic = isWorldMusic; exports.genreOf = genreOf; exports.GLOBAL_GENRES = GLOBAL_GENRES; exports.hasMusicTag = hasMusicTag; exports.brandOf = brandOf; exports.isEnglish = isEnglish; exports.globalScore = globalScore; exports.knownIndex = knownIndex; exports.healthSweep = healthSweep; exports.playerView = playerView; exports.__resetMemory = () => { memory = null; building = null; };

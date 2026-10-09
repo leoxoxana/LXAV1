@@ -34,3 +34,26 @@ describe('trap style needs the word manele', () => {
     expect(radio.OWNER_NOT_MANELE.test('Super Manele')).toBe(false);
   });
 });
+
+describe('"manea" is a word, not a piece of "romaneasca"', () => {
+  test('Romanian light-music stations are not manele', () => {
+    expect(radio.explicitManele({ name: 'Radio Valori Românești', tags: 'muzica usoara romaneasca' })).toBe(false);
+    expect(radio.explicitManele({ name: 'Clasic Radio_100% Romanesc', tags: 'muzica usoara romaneasca,pop' })).toBe(false);
+    expect(radio.inCategory(radio.CATEGORIES[0], { name: 'Radio Liberty Muzică Românească', tags: '90s,hits,muzica usoara romaneasca' })).toBe(false);
+  });
+  test('real manele spellings still count', () => {
+    expect(radio.explicitManele({ name: 'Manea FM', tags: '' })).toBe(true);
+    expect(radio.explicitManele({ name: 'X', tags: 'manele' })).toBe(true);
+    expect(radio.explicitManele({ name: 'ManeleLive', tags: '' })).toBe(true);
+  });
+});
+
+describe('owner decision: Radio Manele Petrecere is listed in ETNO', () => {
+  test('not manele, tier 4 (ETNO)', () => {
+    const st = { name: 'RADIO MANELE PETRECERE', tags: 'manele,petrecere' };
+    expect(radio.explicitManele(st)).toBe(false);
+    expect(radio.styleOf(st)).toEqual(['etno']);
+    expect(radio.maneleTier({ s: radio.styleOf(st) })).toBeGreaterThanOrEqual(3);
+    expect(radio.explicitManele({ name: 'Radio Manele Petrecere Plus', tags: 'manele' })).toBe(true);
+  });
+});
