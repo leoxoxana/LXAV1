@@ -102,7 +102,9 @@ function categoryScore(category, station) {
 // a station that says manele (tag or name) is always listed in MANELE, whatever else it is tagged (dance, house, club, ...), plus its best other category
 // the NAME saying manele is enough; the TAG alone is not when the same station also tags itself populara / folclor / folk / etno (many local stations stick "manele,petrecere,populara" on a popular-music programme: those go to ETNO)
 const explicitManele = station => !OWNER_ETNO.test(String(station.name || '').trim()) && (/\bmanele|\bmanea\b|trapanel/i.test(station.name || '') || (/\bmanele|\bmanea\b|trapanel/i.test(station.tags || '') && !/popular|folclor|folk|etno|ethno|lautar/i.test(station.tags || '')));
-const topCategories = station => explicitManele(station) && inCategory(CATEGORIES[0], station) ? ['manele', ...topCategoriesBase(station).filter(id => id !== 'manele').slice(0, 1)] : topCategoriesBase(station);
+// a station that says manele but is tagged folk / popular / ethno is not manele: it goes to the MANELE pipeline ONLY so that it ends in ETNO (never in dance / pop / ...)
+const maneleWord = station => /\bmanele|\bmanea\b|trapanel/i.test(`${station.tags || ''} ${station.name || ''}`);
+const topCategories = station => explicitManele(station) && inCategory(CATEGORIES[0], station) ? ['manele', ...topCategoriesBase(station).filter(id => id !== 'manele').slice(0, 1)] : maneleWord(station) && inCategory(CATEGORIES[0], station) ? ['manele'] : topCategoriesBase(station);
 const topCategoriesBase = station => CATEGORIES.filter(category => !category.derived).map(category => ({ id: category.id, points: categoryScore(category, station) })).filter(item => item.points > 0).sort((a, b) => b.points - a.points).filter((item, index) => index === 0 || (index === 1 && item.points >= 2)).map(item => item.id);
 
 // real reachability: the stream must answer 2xx with audio bytes (not an HTML error page, not HLS) - and it has to do so for TWO kinds of client:
@@ -210,7 +212,8 @@ async function defaultFetchForeign(category) {
 
 const STYLE_BONUS = { trap: 1.2, new: 0.4 };   // added to the popularity score of a manele station (trap = trap / techno / electro / house / minimal / club / dj)
 const ETNO_MAX = 60, GLOBAL_CANDIDATES = 400, GLOBAL_MAX = 100, GLOBAL_ICY_MAX = 170, GLOBAL_ICY_MS = 10000;   // folk / popular / ethno / party-only stations (tiers 3 and 4) are not manele: they go to ETNO
-const maneleTier = item => { const s = item.s || []; if (s.includes('trap')) return 0; if (s.includes('folk') || s.includes('etno')) return 4; if (s.includes('new')) return 1; return item.m ? 2 : 3; };
+// OWNER RULE: anything folk / popular / ethno is NEVER in MANELE, whatever else it is tagged (trap, club, ...)
+const maneleTier = item => { const s = item.s || []; if (s.includes('folk') || s.includes('etno')) return 4; if (s.includes('trap')) return 0; if (s.includes('new')) return 1; return item.m ? 2 : 3; };
 const notManele = item => maneleTier(item) >= 3;
 const publicItem = (station, foreign, categoryId) => {
   const item = { n: cleanName(station.name), u: streamUrl(station), c: codecOf(station), b: Math.round(Number(station.bitrate) || 0), cc: foreign ? String(station.countrycode || '').toUpperCase().slice(0, 2) : 'RO' };
