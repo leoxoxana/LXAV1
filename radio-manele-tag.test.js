@@ -20,3 +20,17 @@ describe('explicitManele', () => {
     expect(tier('Super Manele', 'manele')).toBe(2);
   });
 });
+
+describe('trap style needs the word manele', () => {
+  test('indie electronic / a plain dj radio are not trap manele; a trap station that says manele is', () => {
+    expect(radio.styleOf({ name: 'Clasic Radio_Indie', tags: 'experimental,indie electronic,indie folk' })).not.toContain('trap');
+    expect(radio.styleOf({ name: 'Center Deejay Brașov -DJ Radio', tags: 'dance,petrecere' })).not.toContain('trap');
+    expect(radio.styleOf({ name: 'Ade FM', tags: 'hip-hop,manele,rap,trap' })).toContain('trap');
+    expect(radio.styleOf({ name: 'Trapanele Radio', tags: '' })).toContain('trap');
+  });
+  test('owner list: stations heard playing other music are kept out of MANELE', () => {
+    expect(radio.OWNER_NOT_MANELE.test('DejaVuMusic -Radio DejaVu')).toBe(true);
+    expect(radio.OWNER_NOT_MANELE.test('Clasic Radio_Indie -București')).toBe(true);
+    expect(radio.OWNER_NOT_MANELE.test('Super Manele')).toBe(false);
+  });
+});

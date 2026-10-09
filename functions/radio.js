@@ -57,7 +57,10 @@ const STYLE_RES = { old: /manele vechi|manele de aur|\bvechi\b|\bretro\b|nostalg
 const FOLK_TAGS = ['folclor', 'muzică populară', 'muzica populara', 'folclor românesc', 'folclor romanesc', 'muzică folclorică', 'muzica folclorica'];
 const isFolk = station => { const tags = String(station.tags || '').toLowerCase().split(',').map(t => t.trim()).filter(Boolean); if (tags.length > 8 && !/folclor|folcloric/i.test(station.name || '')) return false;   // multi-genre stations are not folk stations (unless the name says folclor)
   return tags.some(t => FOLK_TAGS.includes(t)) || /folclor|folcloric/i.test(station.name || '') || (tags.some(t => t === 'populară' || t === 'populara') && /\bpopular\b/i.test(station.name || '')); };
-const styleOf = station => { const text = `${station.tags || ''} ${station.name || ''}`, out = Object.keys(STYLE_RES).filter(key => STYLE_RES[key].test(text)); if (isFolk(station)) out.push('folk'); return out; };
+// OWNER DECISION: stations that were heard playing something else although they are tagged manele (checked on the titles the stream sends); they never go to MANELE
+const OWNER_NOT_MANELE = /^dejavumusic\s*-\s*radio dejavu|^clasic radio_indie|^center deejay/i;
+// "trap" (electro / house / club / dj ...) counts as a manele style only when the station says manele / manea / trapanele somewhere (tag or name): "indie electronic" or a plain DJ radio is not a trap manele
+const styleOf = station => { const text = `${station.tags || ''} ${station.name || ''}`, out = Object.keys(STYLE_RES).filter(key => STYLE_RES[key].test(text) && (key !== 'trap' || /manele|manea|trapanel/i.test(text))); if (isFolk(station)) out.push('folk'); return out; };
 const cleanName = value => String(value || '').replace(/[\p{Cc}<>]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 48);
 const isHttps = url => /^https:\/\/[^\s]+$/i.test(String(url || ''));
 const codecOf = station => { const c = String(station.codec || '').toUpperCase(); return c.startsWith('AAC') ? 'AAC' : c === 'MP3' ? 'MP3' : ''; };
@@ -229,7 +232,7 @@ async function buildList(deps = {}) {
   const fetched = new Map(await Promise.all(CATEGORIES.filter(category => !category.derived).map(async category => [category.id, await fetchRo(category)])));
   for (const category of CATEGORIES) {
     if (category.derived) continue;
-    const raw = [...(fetched.get(category.id) || []).filter(s => String(s.countrycode || 'RO').toUpperCase() === 'RO'), ...roAll].filter(s => (usable(s) || upgradable(s)) && topCategories(s).includes(category.id));
+    const raw = [...(fetched.get(category.id) || []).filter(s => String(s.countrycode || 'RO').toUpperCase() === 'RO'), ...roAll].filter(s => (usable(s) || upgradable(s)) && topCategories(s).includes(category.id) && !(category.id === 'manele' && OWNER_NOT_MANELE.test(s.name || '')));
     const unique = new Map(); for (const s of raw) { const key = s.stationuuid || streamKey(streamUrl(s)); if (!unique.has(key)) unique.set(key, s); }
     const ranked = [...unique.values()].sort((a, b) => score(b) - score(a));
     const limits = category.limits || {};
@@ -601,5 +604,5 @@ exports.handler = async event => {
     return reply({ error: 'Radio list temporarily unavailable.' }, 503, { 'cache-control': 'no-store' });
   }
 };
-exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.stationIndex = stationIndex; exports.MOVE_TARGETS = MOVE_TARGETS; exports.CUSTOM_TARGETS = CUSTOM_TARGETS; exports.__resetHidden = () => { servingCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
+exports.BUILDER_VERSION = BUILDER_VERSION; exports.blockedUrl = blockedUrl; exports.diagnose = diagnose; exports.recheckList = recheckList; exports.servedList = servedList; exports.stationIndex = stationIndex; exports.MOVE_TARGETS = MOVE_TARGETS; exports.CUSTOM_TARGETS = CUSTOM_TARGETS; exports.__resetHidden = () => { servingCache = null; }; exports.buildList = buildList; exports.getList = getList; exports.explicitManele = explicitManele; exports.styleOf = styleOf; exports.OWNER_NOT_MANELE = OWNER_NOT_MANELE; exports.maneleTier = maneleTier; exports.isFolk = isFolk; exports.usable = usable; exports.upgradable = upgradable; exports.upgraded = upgraded; exports.inCategory = inCategory; exports.topCategories = topCategories; exports.categoryScore = categoryScore; exports.CATEGORIES = CATEGORIES; exports.probeStream = probeStream;
 exports.isEnglishish = isEnglishish; exports.isLangFree = isLangFree; exports.isWorldMusic = isWorldMusic; exports.genreOf = genreOf; exports.GLOBAL_GENRES = GLOBAL_GENRES; exports.hasMusicTag = hasMusicTag; exports.brandOf = brandOf; exports.isEnglish = isEnglish; exports.globalScore = globalScore; exports.knownIndex = knownIndex; exports.healthSweep = healthSweep; exports.playerView = playerView; exports.__resetMemory = () => { memory = null; building = null; };
