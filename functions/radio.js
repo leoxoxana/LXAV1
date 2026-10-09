@@ -95,7 +95,8 @@ function categoryScore(category, station) {
 }
 // at most two categories per station (a station tagged house + techno + dance + chill + pop is not shown in five lists)
 // a station that says manele (tag or name) is always listed in MANELE, whatever else it is tagged (dance, house, club, ...), plus its best other category
-const explicitManele = station => /manele|manea|trapanel/i.test(station.tags || '') || /manele|manea|trapanel/i.test(station.name || '');
+// the NAME saying manele is enough; the TAG alone is not when the same station also tags itself populara / folclor / folk / etno (many local stations stick "manele,petrecere,populara" on a popular-music programme: those go to ETNO)
+const explicitManele = station => /manele|manea|trapanel/i.test(station.name || '') || (/manele|manea|trapanel/i.test(station.tags || '') && !/popular|folclor|folk|etno|ethno|lautar/i.test(station.tags || ''));
 const topCategories = station => explicitManele(station) && inCategory(CATEGORIES[0], station) ? ['manele', ...topCategoriesBase(station).filter(id => id !== 'manele').slice(0, 1)] : topCategoriesBase(station);
 const topCategoriesBase = station => CATEGORIES.filter(category => !category.derived).map(category => ({ id: category.id, points: categoryScore(category, station) })).filter(item => item.points > 0).sort((a, b) => b.points - a.points).filter((item, index) => index === 0 || (index === 1 && item.points >= 2)).map(item => item.id);
 
