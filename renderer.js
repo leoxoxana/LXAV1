@@ -707,7 +707,7 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
       if (credit >= 10) {
         if (wildCap >= credit) line = `½ ${short(half)}`;
         else if (half < wildCap) line = `½ ${short(half)} · MAX ${short(wildCap)}`;
-        else line = `MAX ${short(wildCap)}`;
+        else line = `½ → MAX ${short(wildCap)}`;   // the 50% button lands on the WILD cap: say so, otherwise it looks broken
       }
       maxNode.textContent = line;
       if (line) maxNode.style.removeProperty('display'); else maxNode.style.setProperty('display', 'none', 'important');
