@@ -388,6 +388,12 @@
     const nextPrice = owned >= WILD_LEVEL_MAX ? Math.round((owned + 1) * 1000000 * WILD_COST_MULTIPLIER) : wildUpgradeCost(owned);
     return Math.max(5, Math.floor(nextPrice / 2));
   };
+  // The 50% button: half of the balance, rounded to the stake step of that balance and never above the WILD cap. The line under the bet shows exactly this value.
+  const stakeStep = balance => Number(balance) >= 5000000 ? 10000 : Number(balance) >= 1000000 ? 2500 : Number(balance) >= 250000 ? 500 : 5;
+  const halfStake = (credits, level) => {
+    const balance = Math.max(0, Number(credits) || 0), step = stakeStep(balance), cap = maxBetForWildLevel(level);
+    return Math.min(cap, Math.max(step, Math.min(Math.max(step, balance), Math.round(balance * 0.5 / step) * step)));
+  };
   const wildChance = level => Math.min(1, NATURAL_WILD_CHANCE + Math.max(0, Math.min(WILD_LEVEL_MAX, Number(level) || 0)) * WILD_CHANCE_PER_LEVEL);
   // v152: applyWild() (functions/lxa-account.js) draws the "level"-source
   // extra-Wild count from a fixed 78%/20%/2% band distribution capped by the
@@ -733,7 +739,7 @@
     PAYOUT_MULTIPLIER_MIN, PAYOUT_MULTIPLIER_MAX, JACKPOT_VALUE_MULTIPLIER_MIN, JACKPOT_VALUE_MULTIPLIER_MAX,
     WILD_COST_MULTIPLIER_MIN, WILD_COST_MULTIPLIER_MAX, EXTRA_WILD_FREQ_MIN, EXTRA_WILD_FREQ_MAX,
     DEFAULT_WILD_COST_MULTIPLIER, DEFAULT_EXTRA_WILD_FREQUENCY,
-    recommendedBet, wildUpgradeCost, maxBetForWildLevel, wildChance, initialState, selectLineResult, applyWild, resolveSpin, planJackpots, totalProbability, expectedLineMultiplier,
+    recommendedBet, wildUpgradeCost, maxBetForWildLevel, wildChance, initialState, selectLineResult, applyWild, resolveSpin, planJackpots, stakeStep, halfStake, totalProbability, expectedLineMultiplier,
     setDifficultyRtp, resetDifficultyRtp, resetAllDifficultyRtp, getDefaultRtpPercent, rtpRangeForDifficulty,
     setCustomDistribution, resetCustomDistribution, resetAllCustomDistribution, getCustomDistribution,
     setJackpotFrequency, resetJackpotFrequency, resetAllJackpotFrequency, getJackpotFrequency,

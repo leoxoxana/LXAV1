@@ -699,10 +699,18 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
     }
     $('#bet').textContent = euro(gameState.bet);
     // effective ceiling: the Guthaben first, then half the price of the next WILD level - whichever is lower
-    {   // under the bet: MAX only when the WILD level caps the bet below the balance, otherwise the recommended stake (50% of the balance) instead of repeating the credit shown above
-      const credit = Math.max(0, Math.floor(Number(gameState.credits) || 0)), cap = Math.max(0, Math.min(credit, game.maxBetForWildLevel(gameState.wildLevel))), maxNode = $('#betMax');
-      maxNode.textContent = cap < credit ? `MAX ${euro(cap)}` : credit >= 2 ? `50% = ${euro(Math.floor(credit / 2))}` : '';
-      if (maxNode.textContent) maxNode.style.removeProperty('display'); else maxNode.style.setProperty('display', 'none', 'important');
+    {   // ONE short line under the bet: the 50% stake the button sets (same rounding / cap as the button) and, only when the WILD level caps the bet below the balance, the MAX; large sums are shortened (1,2 mil. €)
+      const credit = Math.max(0, Math.floor(Number(gameState.credits) || 0)), wildCap = game.maxBetForWildLevel(gameState.wildLevel), maxNode = $('#betMax');
+      const half = game.halfStake(credit, gameState.wildLevel);
+      const short = value => value >= 1000000 ? new Intl.NumberFormat(lang === 'en' ? 'en-US' : lang === 'ro' ? 'ro-RO' : 'de-DE', { style: 'currency', currency: 'EUR', currencyDisplay: 'narrowSymbol', notation: 'compact', maximumFractionDigits: 1 }).format(value) : euro(value);
+      let line = '';
+      if (credit >= 10) {
+        if (wildCap >= credit) line = `½ ${short(half)}`;
+        else if (half < wildCap) line = `½ ${short(half)} · MAX ${short(wildCap)}`;
+        else line = `MAX ${short(wildCap)}`;
+      }
+      maxNode.textContent = line;
+      if (line) maxNode.style.removeProperty('display'); else maxNode.style.setProperty('display', 'none', 'important');
     }
     $('#lineStake').textContent = `${euro(gameState.bet / game.LINE_COUNT)}${T118('perLineUnit')}`;
     $('#roundLabel').textContent = `${T118('round')} ${String(gameState.round).padStart(3, '0')}`;

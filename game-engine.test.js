@@ -200,6 +200,19 @@ describe('LxaGameEngine', () => {
     });
   });
 
+  describe('50% stake (the button and the line under the bet)', () => {
+    test('half of the balance, rounded to the stake step', () => {
+      expect(game.halfStake(250, 0)).toBe(125);
+      expect(game.halfStake(677919, 1)).toBe(339000);
+      expect(game.halfStake(1194518, 1)).toBe(597500);
+    });
+    test('never above the WILD cap, never below one step', () => {
+      expect(game.halfStake(40000000, 1)).toBe(game.maxBetForWildLevel(1));
+      expect(game.halfStake(100000000, 1)).toBe(game.maxBetForWildLevel(1));
+      expect(game.halfStake(5, 0)).toBe(5);
+    });
+  });
+
   describe('Recommended Bet', () => {
     test('should suggest appropriate bets by balance', () => {
       expect(game.recommendedBet(250000)).toBe(1000);
