@@ -2,7 +2,7 @@
 (function () {
   var TEXT = {
     de: { btn: '❓ SO WIRD GESPIELT', title: 'SO WIRD GESPIELT', close: 'OK', steps: [
-      ['🎰', 'Einsatz & SPIN', 'Mit − und + (oder 50 %) wählst du den Einsatz, maximal die Hälfte deines Guthabens. Dann SPIN. AUTO dreht von selbst.'],
+      ['🎰', 'Einsatz & SPIN', 'Mit − und + (oder 50 % = halbes Guthaben) wählst du den Einsatz, höchstens dein Guthaben. Bei sehr hohem Guthaben begrenzt dein WILD-Level den Einsatz. Dann SPIN. AUTO dreht von selbst.'],
       ['📏', 'Gewinn pro Linie', 'Jede Linie hat 10 Felder. Ab 3 gleichen Treffern gewinnst du: 3/10 bis 10/10. Die Tabelle AUSZAHLUNGSLOGIK zeigt den Faktor.'],
       ['🏆', 'JACKPOT MISSION', 'Bringe 5 verschiedene Linien auf 10/10. Jede erledigte Linie zählt (1/5 … 5/5), danach beginnt die Mission neu. Linien mit WILD zählen dafür nicht.'],
       ['🃏', 'WILD BONUS', 'WILD-Felder helfen beim Füllen der Linien. Mit WILD BONUS kaufst du dauerhaft ein höheres WILD-Level (0–50): mehr WILD pro Spin. Der Preis steht auf dem Button.'],
@@ -10,7 +10,7 @@
       ['📊', 'Rangliste', 'Platz = zuerst dein WILD-LVL, dann dein Geld (Guthaben + Bank). Schwierigkeit 1–3: 1 ist leichter, 3 schwerer.']
     ] },
     ro: { btn: '❓ CUM SE JOACĂ', title: 'CUM SE JOACĂ', close: 'OK', steps: [
-      ['🎰', 'Miză și SPIN', 'Cu − și + (sau 50%) alegi miza, maximum jumătate din sold. Apoi SPIN. AUTO se învârte singur.'],
+      ['🎰', 'Miză și SPIN', 'Cu − și + (sau 50% = jumătate din sold) alegi miza, maximum tot soldul. La un sold foarte mare, nivelul WILD limitează miza. Apoi SPIN. AUTO se învârte singur.'],
       ['📏', 'Câștig pe linie', 'Fiecare linie are 10 câmpuri. De la 3 potriviri câștigi: de la 3/10 la 10/10. Tabelul LOGICA DE PLATĂ arată factorul.'],
       ['🏆', 'MISIUNE JACKPOT', 'Adu 5 linii diferite la 10/10. Fiecare linie terminată se numără (1/5 … 5/5), apoi misiunea începe din nou. Liniile cu WILD nu contează aici.'],
       ['🃏', 'WILD BONUS', 'Câmpurile WILD te ajută să completezi liniile. Cu WILD BONUS cumperi permanent un nivel WILD mai mare (0–50): mai multe WILD la fiecare spin. Prețul e pe buton.'],
@@ -18,7 +18,7 @@
       ['📊', 'Clasament', 'Locul = întâi LVL WILD, apoi banii tăi (sold + bancă). Dificultate 1–3: 1 e mai ușor, 3 mai greu.']
     ] },
     en: { btn: '❓ HOW TO PLAY', title: 'HOW TO PLAY', close: 'OK', steps: [
-      ['🎰', 'Bet & SPIN', 'Use − and + (or 50%) to pick your bet, at most half of your balance. Then SPIN. AUTO spins by itself.'],
+      ['🎰', 'Bet & SPIN', 'Use − and + (or 50% = half your balance) to pick your bet, at most your whole balance. With a very high balance your WILD level caps the bet. Then SPIN. AUTO spins by itself.'],
       ['📏', 'Win per line', 'Each line has 10 cells. From 3 matches you win: 3/10 up to 10/10. The PAYOUT table shows the multiplier.'],
       ['🏆', 'JACKPOT MISSION', 'Bring 5 different lines to 10/10. Every finished line counts (1/5 … 5/5), then the mission starts again. Lines containing a WILD do not count here.'],
       ['🃏', 'WILD BONUS', 'WILD cells help you fill lines. WILD BONUS buys a permanently higher WILD level (0–50): more WILDs per spin. The price is on the button.'],
