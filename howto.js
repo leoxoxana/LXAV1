@@ -72,6 +72,7 @@
       if (!img) return;
       var br = brand.getBoundingClientRect(), ir = img.getBoundingClientRect();
       if (ir.height > 0) b.style.top = Math.round(ir.top - br.top + ir.height / 2) + 'px';
+      b.style.left = Math.round(12 - br.left) + 'px';   // always 12 px from the screen edge (the header box itself starts at the edge in the home-screen app, 8 px in from it in the browser)
     }
     place();
     if (img && !img.complete) img.addEventListener('load', place);
