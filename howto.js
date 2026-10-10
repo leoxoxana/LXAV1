@@ -27,7 +27,7 @@
     ] }
   };
   var css = 'html body .topbar .brand-cluster .brand{position:relative}' +
-    'html body .topbar .howto-btn{position:absolute;z-index:9;left:8px;top:28px;transform:translateY(-50%);width:38px;height:38px;margin:0;padding:0;border-radius:50%;border:2px solid #f0c8ff;background:radial-gradient(circle at 35% 30%,#d36bff,#7a2fd0 70%);color:#fff;font-size:21px;line-height:1;cursor:pointer;opacity:1;box-shadow:0 0 0 3px rgba(190,110,255,.35),0 0 14px rgba(200,110,255,.85)}' +
+    'html body .topbar .howto-btn{position:absolute;z-index:9;left:8px;top:28px;transform:translateY(-50%);width:38px;height:38px;margin:0;padding:0;border-radius:50%;border:2px solid #4fc3ff;background:radial-gradient(circle at 35% 30%,#7a6cff,#3a2aa8 70%);color:#fff;font-size:21px;line-height:1;cursor:pointer;opacity:1;box-shadow:0 0 0 2px rgba(60,150,255,.25),0 0 14px rgba(70,170,255,.8)}' +
     'html body .topbar .howto-btn:active{transform:translateY(-50%) scale(.94)}' +
     '.howto-back{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,0,15,.82)}' +
     '.howto-box{max-width:460px;width:100%;max-height:90vh;overflow:auto;border:1px solid #c58bff;border-radius:16px;background:#14082a;color:#f2e2ff;padding:16px 16px 12px;box-shadow:0 0 30px rgba(170,90,255,.45)}' +
