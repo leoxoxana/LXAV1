@@ -699,7 +699,11 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
     }
     $('#bet').textContent = euro(gameState.bet);
     // effective ceiling: the Guthaben first, then half the price of the next WILD level - whichever is lower
-    $('#betMax').textContent = `MAX ${euro(Math.max(0, Math.min(Math.floor(Number(gameState.credits) || 0), game.maxBetForWildLevel(gameState.wildLevel))))}`;
+    {   // MAX is shown only when it says something new: the WILD level caps the bet below the balance (otherwise it would repeat the credit shown above)
+      const credit = Math.max(0, Math.floor(Number(gameState.credits) || 0)), cap = Math.max(0, Math.min(credit, game.maxBetForWildLevel(gameState.wildLevel))), maxNode = $('#betMax');
+      maxNode.textContent = cap < credit ? `MAX ${euro(cap)}` : '';
+      if (cap < credit) maxNode.style.removeProperty('display'); else maxNode.style.setProperty('display', 'none', 'important');
+    }
     $('#lineStake').textContent = `${euro(gameState.bet / game.LINE_COUNT)}${T118('perLineUnit')}`;
     $('#roundLabel').textContent = `${T118('round')} ${String(gameState.round).padStart(3, '0')}`;
     // V326: logged-in players see ONE clean line - id/name, round, rank -
