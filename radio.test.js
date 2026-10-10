@@ -42,7 +42,7 @@ describe('buildList', () => {
     expect(items(data, 'manele').map(i => i.n)).toEqual(['Manele Live']);
     expect(items(data, 'rock').map(i => i.n)).toEqual(['Rock One']);
     expect(items(data, 'rap')).toEqual([]);
-    expect(data.cats.map(c => c.id)).toEqual(['manele', 'etno', 'rap', 'house', 'techno', 'dance', 'pop', 'rock', 'chill', 'retro', 'global']);   // TOP (the players' stars) is added when the list is served
+    expect(data.cats.map(c => c.id)).toEqual(['manele', 'rap', 'house', 'techno', 'dance', 'pop', 'rock', 'chill', 'etno', 'retro', 'global']);   // TOP (the players' stars) is added when the list is served
   });
   test('duplicates (same stream or same name) appear once per category; best-scored first', async () => {
     const a = st({ name: 'Kiss FM', tags: 'pop', clickcount: 5000 }), same = { ...a, stationuuid: 'other', name: 'Kiss FM (2)' }, nameTwin = st({ name: 'KISS  FM!', tags: 'pop', clickcount: 1 });
@@ -261,9 +261,9 @@ describe('styles of manele', () => {
     const data = await radio.buildList({ fetchRo: async () => [POP('One', 'manele', 5)], fetchRoAll: async () => [], fetchForeign: async () => [], fetchGlobal: async () => [], probe: async () => true, collectListeners: async () => { throw new Error('boom'); }, now: Date.now });
     expect(manele(data).map(i => i.n)).toEqual(['One']);
   });
-  test('the 🔥 of MANELE = the three most popular manele (also when a small trap station would be first by taste)', async () => {
+  test('the 🔥 of MANELE = the two most popular manele + the best trap / electro station (a tiny trap station gets it too)', async () => {
     const data = await run([POP('Tiny Trap', 'manele,trap', 1), POP('Big', 'manele', 900), POP('Mid', 'manele', 500), POP('Low', 'manele', 300), POP('Lower', 'manele', 100)]);
-    expect(manele(data).filter(i => i.top).map(i => i.n).sort()).toEqual(['Big', 'Low', 'Mid']);
+    expect(manele(data).filter(i => i.top).map(i => i.n).sort()).toEqual(['Big', 'Mid', 'Tiny Trap']);
   });  const etnoOf = data => data.cats.find(c => c.id === 'etno').items;
   test('ETNO holds the folk / popular / ethno / party-only stations, most listened first, as plain rows (no style mark); MANELE has none of them', async () => {
     const folk = ['A', 'B', 'C', 'D', 'E', 'F'].map((k, i) => st({ name: 'Folclor ' + k, tags: 'folclor,petrecere,manele vechi', clickcount: 5000 - i * 100 }));   // A is the most listened
@@ -279,10 +279,10 @@ describe('styles of manele', () => {
     expect(manele(data).map(i => i.n)).toEqual(['Plain Manele']);
     expect(etnoOf(data).map(i => i.n).sort()).toEqual(['Club Etno', 'Party Only']);
   });
-  test('the 🔥 of MANELE goes to the best manele (never to a folk station, however listened); ETNO has its own three', async () => {
+  test('the 🔥 of MANELE goes to the best manele (never to a folk station, however listened); FOLK has no 🔥 at all', async () => {
     const data = await run([st({ name: 'Folclor Big', tags: 'folclor', clickcount: 90000 }), st({ name: 'Etno Big', tags: 'etno,manele', clickcount: 80000 }), st({ name: 'Plain 1', tags: 'manele', clickcount: 300 }), st({ name: 'Plain 2', tags: 'manele', clickcount: 200 }), st({ name: 'Plain 3', tags: 'manele', clickcount: 100 }), st({ name: 'Plain 4', tags: 'manele', clickcount: 50 })]);
     expect(manele(data).filter(i => i.top).map(i => i.n).sort()).toEqual(['Plain 1', 'Plain 2', 'Plain 3']);
-    expect(etnoOf(data).map(i => i.n)).toEqual(['Folclor Big', 'Etno Big']); expect(etnoOf(data).every(i => i.top)).toBe(true);
+    expect(etnoOf(data).map(i => i.n)).toEqual(['Folclor Big', 'Etno Big']); expect(etnoOf(data).some(i => i.top)).toBe(false);
   });
   test('ETNO keeps at most 60 stations', async () => {
     const data = await run(Array.from({ length: 70 }, (_, i) => st({ name: 'Folclor ' + i, tags: 'folclor', clickcount: 9000 - i })));

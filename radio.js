@@ -40,6 +40,7 @@
   var sleepTimer = 0, sleepTick = 0, sleepEnd = 0, lastDir = 1;   // lastDir: a dead station is skipped in the direction the listener was going (⏮ keeps going back)
   var saved = store.get(KEY, {}); if (!saved || typeof saved !== 'object') saved = {};
   var eco = saved.eco === true;
+  var SPECIAL_ICON = { manele: '🔥', rap: '🎤', house: '🪩', techno: '⚡', dance: '🎉', pop: '🌟', rock: '🤘', chill: '🌴', retro: '📼', global: '🌍' };   // the mark of the special stations (flag top from the server) differs per category; FOLK has none
   var STYLE_ICON = { trap: '⚡', old: '🕰', 'new': '✨' };   // small style marks in the rows; the ORDER inside MANELE (trap / techno first, folk / ethno last) comes from the server, there is no style filter
   if (saved.cat) catId = saved.cat;
   if (typeof saved.vol === 'number') volEl.value = String(Math.max(0, Math.min(100, saved.vol)));
@@ -196,7 +197,7 @@
       var on = now && now.u === r.it.u; if (on) { b.classList.add('on'); b.setAttribute('aria-current', 'true'); }
       if (badMap[r.it.u] || (view === 'find' && findBad(r.it.u))) b.classList.add('bad');
       var name = document.createElement('span'); name.className = 'radio-st-name';
-      if (view === 'cat' && !q && r.it.top) { var top = document.createElement('span'); top.className = 'radio-top'; top.textContent = '🔥'; top.setAttribute('aria-hidden', 'true'); name.appendChild(top); }   // 🔥 = one of the three most popular stations of the category (flag from the server); it sits INSIDE the name, so the row layout (name left, quality right) stays the same
+      if (view === 'cat' && !q && r.it.top) { var top = document.createElement('span'); top.className = 'radio-top'; top.textContent = SPECIAL_ICON[r.cid] || '🔥'; top.setAttribute('aria-hidden', 'true'); name.appendChild(top); }   // 🔥 = one of the three most popular stations of the category (flag from the server); it sits INSIDE the name, so the row layout (name left, quality right) stays the same
       name.appendChild(document.createTextNode(r.it.n));
       var meta = document.createElement('small'); meta.textContent = (r.it.mine ? '🔗 ' : '') + (r.cid === 'manele' && r.it.s ? r.it.s.map(function (s) { return STYLE_ICON[s] || ''; }).join('') + ' ' : '') + (view === 'find' && findBad(r.it.u) ? '❌ ' + findBad(r.it.u) + ' · ' : '') + (r.it.f ? r.it.f + ' · ' : '') + (r.it.cc && r.it.cc !== 'RO' ? r.it.cc + ' · ' : '') + r.it.c + (r.it.b ? ' ' + r.it.b : '');
       b.appendChild(name); b.appendChild(meta);

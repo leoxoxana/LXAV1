@@ -57,3 +57,12 @@ describe('owner decision: Radio Manele Petrecere is listed in ETNO', () => {
     expect(radio.explicitManele({ name: 'Radio Manele Petrecere Plus', tags: 'manele' })).toBe(true);
   });
 });
+
+describe('categories: FOLK sits between CHILL and RETRO, GLOBAL has its special marks', () => {
+  const cats = radio.CATEGORIES.map(c => c.id);
+  test('order and label', () => {
+    expect(cats.indexOf('etno')).toBe(cats.indexOf('chill') + 1);
+    expect(cats.indexOf('retro')).toBe(cats.indexOf('etno') + 1);
+    expect(radio.CATEGORIES.find(c => c.id === 'etno').label).toBe('FOLK');
+  });
+});

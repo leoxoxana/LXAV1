@@ -26,8 +26,6 @@ const BUILD_BUDGET_MS = 32000;               // the function may run 60 s (verce
 // not = stations that are about something else (news, talk, religion) never enter a music category
 const CATEGORIES = [
   { id: 'manele', emoji: '🔥', label: 'MANELE', limits: { direct: 120, twins: 80, max: 120 }, pin: /trapanel|\btrap\b|t[e]?hno|techno|\belectro|\bhouse\b|minimal|\bclub\b|hip[ -]?hop|\bdj\b|remix|manele noi|manele vechi/i, re: /\bmanele|\bmanea\b|trapanel|petrecere|lautaresc|lăutăresc|taraf|folclor|folcloric|muzic[aă] popular[aă]|\betno\b|popular[aă]|\bfolk\b/i, queries: ['manele', 'petrecere', 'trapanele', 'lautareasca', 'folclor', 'populara', 'etno'], foreign: [] },
-  // ETNO is derived: the stations of the MANELE pipeline that are not manele (folk / popular / ethno / party-only "populara"), see buildList. TOP (the players' favourites) is added when the list is served.
-  { id: 'etno', emoji: '🎻', label: 'ETNO', derived: true },
   { id: 'rap', emoji: '🎤', label: 'RAP', re: /\brap\b|hip[ -]?hop|\btrap\b|urban|\br&b\b/i, queries: ['rap', 'hip hop', 'trap'], foreign: ['hip hop', 'rap'] },
   { id: 'house', emoji: '🪩', label: 'HOUSE', re: /\bhouse\b|deep house|progressive house/i, not: /tech[ -]?house/i, queries: ['house', 'deep house'], foreign: ['house', 'deep house'] },
   { id: 'techno', emoji: '⚡', label: 'TECHNO', re: /techno|minimal|tech[ -]?house|trance|\belectronic\b/i, queries: ['techno', 'minimal', 'trance', 'electronic'], foreign: ['techno', 'minimal'] },
@@ -35,6 +33,8 @@ const CATEGORIES = [
   { id: 'pop', emoji: '🎵', label: 'POP', re: /\bpop\b|top ?40|top hits|\bhits\b|mainstream|\bcharts?\b/i, queries: ['pop', 'top 40', 'hits'], foreign: ['pop', 'top 40'] },
   { id: 'rock', emoji: '🎸', label: 'ROCK', re: /rock|alternative|\bmetal\b|punk|grunge/i, queries: ['rock', 'alternative', 'metal'], foreign: ['rock', 'classic rock'] },
   { id: 'chill', emoji: '🌴', label: 'CHILL', re: /chill|lounge|ambient|relax|downtempo|\bjazz\b|easy listening/i, queries: ['chillout', 'lounge', 'ambient', 'relax', 'jazz'], foreign: ['chillout', 'lounge'] },
+  // FOLK (id etno, label FOLK) is derived: the stations of the MANELE pipeline that are not manele (folk / popular / ethno / party-only "populara"), see buildList. TOP (the players' favourites) is added when the list is served.
+  { id: 'etno', emoji: '🎻', label: 'FOLK', derived: true },
   // the most listened music that was missing: 80s / 90s / oldies / classic hits (manele "vechi" and folk are not retro)
   { id: 'retro', emoji: '🕰', label: 'RETRO', re: /\b(70|80|90)'?s\b|oldies|retro|\bdisco\b|classic hits|\bgolden\b|nostalg|anii (70|80|90)/i, not: /\bmanele|\bmanea\b|trapanel|petrecere|folclor|popular/i, queries: ['oldies', '80s', '90s', '70s', 'retro', 'classic hits', 'disco'], foreign: ['oldies', '80s', '90s'] }
 ];
@@ -275,8 +275,7 @@ async function buildList(deps = {}) {
   const result = []; let etnoItems = []; const stationOf = new Map();   // public item -> the directory record it came from (votes, clicks, bitrate for the popularity order)
   const collect = deps.collectListeners || (deps.probe ? async () => new Map() : collectListeners);   // (tests that inject their own probe never touch the network here)
   for (const category of CATEGORIES) {
-    if (category.derived) {   // ETNO = what the MANELE pipeline found that is not manele (it comes right after MANELE in CATEGORIES)
-      etnoItems.slice(0, 3).forEach(item => { item.top = 1; });
+    if (category.derived) {   // ETNO = what the MANELE pipeline found that is not manele (it is computed while MANELE is built, which comes first)
       result.push({ id: category.id, emoji: category.emoji, label: category.label, items: etnoItems }); continue;
     }
     const items = [], localKeys = new Set();
@@ -301,7 +300,10 @@ async function buildList(deps = {}) {
       const listeners = overBudget() ? new Map() : await collect(items.map(item => item.u)).catch(() => new Map());
       const base = item => popularity(stationOf.get(item) || {}, listeners.get(item.u)), bonus = item => { const styles = item.s || []; return styles.includes('trap') ? STYLE_BONUS.trap : styles.includes('new') ? STYLE_BONUS.new : 0; };
       const real = items.filter(item => !notManele(item)).sort((a, b) => (base(b) + bonus(b)) - (base(a) + bonus(a)));
-      real.filter(item => item.cc === 'RO').slice(0, 3).forEach(item => { item.top = 1; });
+      // 🔥 = the two most popular manele + the best trap / electro one (a third popular one when there is no trap station)
+      const ro = real.filter(item => item.cc === 'RO'), flame = ro.slice(0, 2), trap = ro.slice(2).find(item => (item.s || []).includes('trap')) || ro.slice(0, 2).find(item => (item.s || []).includes('trap'));
+      if (trap && !flame.includes(trap)) flame.push(trap); else if (ro[2] && flame.length < 3) flame.push(ro[2]);
+      flame.forEach(item => { item.top = 1; });
       etnoItems = items.filter(notManele).sort((a, b) => base(b) - base(a)).slice(0, ETNO_MAX); etnoItems.forEach(item => { delete item.s; delete item.top; delete item.m; });
       items.length = 0; items.push(...real);
     }
@@ -334,7 +336,7 @@ async function buildList(deps = {}) {
     }
   }
   for (const row of globalOrder) { if (chosenRows.size >= GLOBAL_MAX) break; if (!chosenRows.has(row) && !row.s.__langFree && fits(row)) take(row); }   // pass 2: the places a family could not fill go to the best of the rest
-  const globalItems = globalOrder.filter(row => chosenRows.has(row)).map(({ s: station }) => { const item = publicItem(station, true, 'global'); item.n = item.n.replace(/^[^\p{L}\p{N}]+/u, '') || item.n; return item; });   // listed by popularity again (names like "# TOP 100 ..." lose the symbols in front)
+  const globalItems = globalOrder.filter(row => chosenRows.has(row)).map(({ s: station }) => { const item = publicItem(station, true, 'global'); item.n = item.n.replace(/^[^\p{L}\p{N}]+/u, '') || item.n; if (station.__flagship) item.top = 1; return item; });   // the curated brands are the special ones of GLOBAL   // listed by popularity again (names like "# TOP 100 ..." lose the symbols in front)
   result.push({ id: 'global', emoji: '🌍', label: 'GLOBAL', items: globalItems });
   // ONE category per station: the same stream (or the same name) is listed once in the whole list, in the category where it fits best (MANELE for explicit manele, then ETNO, then the best tag score; GLOBAL last)
   const fit = (cat, item) => { const rec = stationOf.get(item); if (cat.id === 'global') return 0; if (!rec) return cat.id === 'etno' ? 50 : 1; if (cat.id === 'manele' && explicitManele(rec)) return 100; const def = CATEGORIES.find(c => c.id === cat.id); return def && !def.derived ? categoryScore(def, rec) + (cat.id === 'retro' ? 3 : 0) : 1; };   // (an 80s / 90s / oldies station is first of all retro)
