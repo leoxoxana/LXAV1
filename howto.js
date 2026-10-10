@@ -26,9 +26,9 @@
       ['📊', 'Leaderboard', 'Rank = your WILD LVL first, then your money (balance + bank). Difficulty 1–3: 1 is easier, 3 is harder.']
     ] }
   };
-  var css = 'html body .topbar{position:relative}' +
-    'html body .howto-btn{position:absolute;z-index:6;left:6px;top:50%;transform:translateY(-50%);width:38px;height:38px;margin:0;padding:0;border-radius:50%;border:2px solid #f0c8ff;background:radial-gradient(circle at 35% 30%,#d36bff,#7a2fd0 70%);color:#fff;font-size:21px;line-height:1;cursor:pointer;box-shadow:0 0 0 3px rgba(190,110,255,.35),0 0 14px rgba(200,110,255,.85)}' +
-    'html body .howto-btn:active{transform:translateY(-50%) scale(.94)}' +
+  var css = 'html body .topbar .brand-cluster .brand{position:relative}' +
+    'html body .topbar .howto-btn{position:absolute;z-index:9;left:8px;top:28px;transform:translateY(-50%);width:38px;height:38px;margin:0;padding:0;border-radius:50%;border:2px solid #f0c8ff;background:radial-gradient(circle at 35% 30%,#d36bff,#7a2fd0 70%);color:#fff;font-size:21px;line-height:1;cursor:pointer;opacity:1;box-shadow:0 0 0 3px rgba(190,110,255,.35),0 0 14px rgba(200,110,255,.85)}' +
+    'html body .topbar .howto-btn:active{transform:translateY(-50%) scale(.94)}' +
     '.howto-back{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,0,15,.82)}' +
     '.howto-box{max-width:460px;width:100%;max-height:90vh;overflow:auto;border:1px solid #c58bff;border-radius:16px;background:#14082a;color:#f2e2ff;padding:16px 16px 12px;box-shadow:0 0 30px rgba(170,90,255,.45)}' +
     '.howto-box h2{margin:0 0 10px;font-size:16px;letter-spacing:.08em;text-align:center}' +
@@ -53,8 +53,8 @@
     document.body.appendChild(back);
   }
   function init() {
-    var host = document.querySelector('.topbar');
-    if (!host || document.querySelector('.howto-btn')) return;
+    var brand = document.querySelector('.topbar .brand-cluster .brand');
+    if (!brand || document.querySelector('.howto-btn')) return;
     var style = document.createElement('style');
     style.textContent = css;
     document.head.appendChild(style);
@@ -65,7 +65,22 @@
     b.setAttribute('aria-label', TEXT[lang()].btn);
     b.title = TEXT[lang()].btn;
     b.addEventListener('click', open);
-    host.insertBefore(b, host.firstChild);
+    brand.appendChild(b);
+    // centred on the logo picture itself: in the home-screen app the header is taller (status bar area), so the middle of the header is NOT the middle of the logo
+    var img = brand.querySelector('img');
+    function place() {
+      if (!img) return;
+      var br = brand.getBoundingClientRect(), ir = img.getBoundingClientRect();
+      if (ir.height > 0) b.style.top = Math.round(ir.top - br.top + ir.height / 2) + 'px';
+    }
+    place();
+    if (img && !img.complete) img.addEventListener('load', place);
+    window.addEventListener('resize', place);
+    window.addEventListener('orientationchange', place);
+    window.addEventListener('load', place);
+    setTimeout(place, 400);
+    setTimeout(place, 1500);
+    if (window.ResizeObserver) new ResizeObserver(place).observe(brand);
     new MutationObserver(function () { b.setAttribute('aria-label', TEXT[lang()].btn); b.title = TEXT[lang()].btn; }).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

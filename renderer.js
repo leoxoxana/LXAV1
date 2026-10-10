@@ -699,10 +699,10 @@ document.querySelector('#leaderboardTabs')?.addEventListener('click',event=>{con
     }
     $('#bet').textContent = euro(gameState.bet);
     // effective ceiling: the Guthaben first, then half the price of the next WILD level - whichever is lower
-    {   // MAX is shown only when it says something new: the WILD level caps the bet below the balance (otherwise it would repeat the credit shown above)
+    {   // under the bet: MAX only when the WILD level caps the bet below the balance, otherwise the recommended stake (50% of the balance) instead of repeating the credit shown above
       const credit = Math.max(0, Math.floor(Number(gameState.credits) || 0)), cap = Math.max(0, Math.min(credit, game.maxBetForWildLevel(gameState.wildLevel))), maxNode = $('#betMax');
-      maxNode.textContent = cap < credit ? `MAX ${euro(cap)}` : '';
-      if (cap < credit) maxNode.style.removeProperty('display'); else maxNode.style.setProperty('display', 'none', 'important');
+      maxNode.textContent = cap < credit ? `MAX ${euro(cap)}` : credit >= 2 ? `50% = ${euro(Math.floor(credit / 2))}` : '';
+      if (maxNode.textContent) maxNode.style.removeProperty('display'); else maxNode.style.setProperty('display', 'none', 'important');
     }
     $('#lineStake').textContent = `${euro(gameState.bet / game.LINE_COUNT)}${T118('perLineUnit')}`;
     $('#roundLabel').textContent = `${T118('round')} ${String(gameState.round).padStart(3, '0')}`;
