@@ -209,21 +209,32 @@ describe('LxaGameEngine', () => {
 
   describe('Jackpot Logic', () => {
     test('should complete jackpot cycle on 5 distinct 10/10 lines', () => {
-      let state = game.initialState({ credits: 100000000, bet: 10, difficulty: 1 });
-      let result;
+      // every roll is the top one: all 5 lines are natural 10/10 in the SAME spin, so all 5 count at once, each paying the next tier of that spin's bet, and the cycle restarts
+      const state = game.initialState({ credits: 100000000, bet: 10, difficulty: 1 });
+      const { state: next, spin } = game.resolveSpin(state, () => .999999999, 1700000000000);
+      expect(spin.jackpotAwards.map(award => award.line)).toEqual([0, 1, 2, 3, 4]);
+      expect(spin.jackpotAwards.map(award => award.amount)).toEqual(game.JACKPOT_TIER_MULTIPLIERS.map(multiplier => multiplier * 10));
+      expect(spin.jackpotCycleCompleted).toBe(true);
+      expect(next.jackpotCycleId).toBe(2);
+      expect(next.jackpotProgress).toBe(0);
+      expect(next.completedLines).toEqual([false, false, false, false, false]);
+      expect(next.recordHits).toEqual([0, 0, 0, 0, 0]);
+    });
 
-      for (let spin = 0; spin < 5; spin++) {
-        result = game.resolveSpin(state, () => .999999999, 1700000000000 + spin);
-        state = result.state;
-        expect(result.spin.jackpotAwards.length).toBe(1);
-        expect(result.spin.jackpotAwards[0].line).toBe(spin);
-        expect(result.spin.jackpotAwards[0].amount).toBe(game.JACKPOT_TIER_MULTIPLIERS[spin] * 10);
-      }
+    test('two natural 10/10 lines in one spin both count, each paying the next tier', () => {
+      const plan = game.planJackpots({ finalResults: [10, 4, 10, 3, 6], completed: [false, false, false, false, true], wildAssistedTen: [], lineHasWild: [false, false, false, false, false], stake: 1000 });
+      expect(plan.awards).toEqual([{ line: 0, tierIndex: 1, amount: 2000 }, { line: 2, tierIndex: 2, amount: 3000 }]);
+      expect(plan.completedAfter).toEqual([true, false, true, false, true]);
+      expect(plan.progressAfter).toBe(3);
+      expect(plan.cycleComplete).toBe(false);
+    });
 
-      expect(state.jackpotCycleId).toBe(2);
-      expect(state.jackpotProgress).toBe(0);
-      expect(state.completedLines).toEqual([false, false, false, false, false]);
-      expect(state.recordHits).toEqual([0, 0, 0, 0, 0]);
+    test('a line with a WILD or a repeated line never counts; counting stops at 5/5', () => {
+      const none = game.planJackpots({ finalResults: [10, 10, 10, 10, 10], completed: [true, false, false, false, false], wildAssistedTen: [false, true, false, false, false], lineHasWild: [false, false, true, false, false], stake: 100 });
+      expect(none.awards.map(award => award.line)).toEqual([3, 4]);
+      const stop = game.planJackpots({ finalResults: [10, 10, 10, 10, 10], completed: [true, true, true, true, false], wildAssistedTen: [], lineHasWild: [], stake: 100 });
+      expect(stop.awards.map(award => award.line)).toEqual([4]);
+      expect(stop.cycleComplete).toBe(true);
     });
 
     test('should not advance jackpot on repeated line', () => {

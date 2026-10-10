@@ -613,6 +613,19 @@
     };
   }
 
+  // The jackpot lines of one spin. `completed` = the lines already done in this cycle. A line counts when it is a NATURAL 10/10 (no WILD on it, not WILD-assisted) and not done yet; the lines are taken in order,
+  // each pays the tier of the progress it reaches (tier index = lines done before it), and the counting stops at 5/5 (the cycle restarts, the rest of the spin is not carried over).
+  function planJackpots({ finalResults, completed, wildAssistedTen, lineHasWild, stake }) {
+    const done = Array.from({ length: LINE_COUNT }, (_, index) => Boolean(completed && completed[index])), awards = [];
+    let progress = done.filter(Boolean).length;
+    for (let line = 0; line < LINE_COUNT && progress < LINE_COUNT; line++) {
+      if (finalResults[line] === COLUMN_COUNT && !done[line] && !(wildAssistedTen && wildAssistedTen[line]) && !(lineHasWild && lineHasWild[line])) {
+        awards.push({ line, tierIndex: progress, amount: cents(JACKPOT_TIER_MULTIPLIERS[progress] * stake) });
+        done[line] = true; progress++;
+      }
+    }
+    return { awards, completedAfter: done, progressAfter: progress, cycleComplete: awards.length > 0 && done.every(Boolean) };
+  }
   function resolveSpin(rawState, rng = Math.random, now = Date.now()) {
     const state = initialState(rawState);
     if (state.credits < state.bet) throw new Error('Insufficient credits.');
@@ -631,15 +644,14 @@
     // wildAssistedTen) also still receives its normal payout but never
     // counts toward the jackpot mission or its bonus - only a natural
     // (no-Wild) 10/10 can progress/complete the jackpot.
-    const jackpotLine = finalResults.findIndex((hits, line) => hits === COLUMN_COUNT && !state.completedLines[line] && !wild.wildAssistedTen[line] && !wild.lineHasWild[line]);
-    // v135: jackpot amount is this tier's multiplier times THIS SPIN's bet.
-    const jackpotAwards = jackpotLine < 0 ? [] : [{ line: jackpotLine, tierIndex: jackpotProgressBefore, amount: cents(JACKPOT_TIER_MULTIPLIERS[jackpotProgressBefore] * totalStake) }];
+    // v160 (user request): EVERY new natural 10/10 line of the spin counts, not only the first one. Each one completes its line and pays the next tier (in line order) of THIS SPIN's bet; the
+    // spin stops counting at 5/5 (the cycle restarts). See planJackpots.
+    const plan = planJackpots({ finalResults, completed: state.completedLines, wildAssistedTen: wild.wildAssistedTen, lineHasWild: wild.lineHasWild, stake: totalStake });
+    const jackpotAwards = plan.awards;
     const jackpotPayout = cents(jackpotAwards.reduce((sum, award) => sum + award.amount, 0));
-    const completedBefore = state.completedLines.slice(0, LINE_COUNT);
-    const completedAfterAward = completedBefore.slice();
-    if (jackpotLine >= 0) completedAfterAward[jackpotLine] = true;
-    const reachedFiveOfFive = jackpotAwards.length > 0 && completedAfterAward.every(Boolean);
-    const progressAfter = completedAfterAward.filter(Boolean).length;
+    const completedAfterAward = plan.completedAfter;
+    const reachedFiveOfFive = plan.cycleComplete;
+    const progressAfter = plan.progressAfter;
     const persistedCompletedLines = reachedFiveOfFive ? Array(LINE_COUNT).fill(false) : completedAfterAward;
     // V118: line records belong to the current jackpot cycle. When 5/5 is
     // completed all lines are open again, so their records restart at 0/10.
@@ -721,7 +733,7 @@
     PAYOUT_MULTIPLIER_MIN, PAYOUT_MULTIPLIER_MAX, JACKPOT_VALUE_MULTIPLIER_MIN, JACKPOT_VALUE_MULTIPLIER_MAX,
     WILD_COST_MULTIPLIER_MIN, WILD_COST_MULTIPLIER_MAX, EXTRA_WILD_FREQ_MIN, EXTRA_WILD_FREQ_MAX,
     DEFAULT_WILD_COST_MULTIPLIER, DEFAULT_EXTRA_WILD_FREQUENCY,
-    recommendedBet, wildUpgradeCost, maxBetForWildLevel, wildChance, initialState, selectLineResult, applyWild, resolveSpin, totalProbability, expectedLineMultiplier,
+    recommendedBet, wildUpgradeCost, maxBetForWildLevel, wildChance, initialState, selectLineResult, applyWild, resolveSpin, planJackpots, totalProbability, expectedLineMultiplier,
     setDifficultyRtp, resetDifficultyRtp, resetAllDifficultyRtp, getDefaultRtpPercent, rtpRangeForDifficulty,
     setCustomDistribution, resetCustomDistribution, resetAllCustomDistribution, getCustomDistribution,
     setJackpotFrequency, resetJackpotFrequency, resetAllJackpotFrequency, getJackpotFrequency,
