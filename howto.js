@@ -8,6 +8,11 @@
       ['🃏', 'WILD BONUS', 'WILD-Felder helfen beim Füllen der Linien. Mit WILD BONUS kaufst du dauerhaft ein höheres WILD-Level (0–50): mehr WILD pro Spin. Der Preis steht auf dem Button.'],
       ['🏦', 'BANK', 'Der Button BANK verschiebt Guthaben in deine Bank. Beim WILD-Kauf wird zuerst die Bank benutzt, dann das Guthaben.'],
       ['📊', 'Rangliste', 'Platz = zuerst dein WILD-LVL, dann dein Geld (Guthaben + Bank). Schwierigkeit 1–3: 1 ist leichter, 3 schwerer.']
+,
+      ['🎫', 'ID / KONTO', 'Hier erstellst du ein Konto oder loggst dich ein (ID oder Name + Passwort). Mit Konto wird dein Fortschritt gespeichert und du erscheinst in der Rangliste; dort änderst du auch Name und Passwort. Ohne Konto spielst du als GAST.'],
+      ['🌐', 'Sprache', 'Die Flagge wechselt die Sprache: Deutsch, Română oder English. Deine Wahl wird auf diesem Gerät gemerkt.'],
+      ['🔓', 'Seite sperren', 'Das Schloss sperrt das Scrollen der Seite, damit sie beim Spielen nicht verrutscht. Nochmal tippen zum Lösen. Radio und KONTO lassen sich weiter scrollen.'],
+      ['☕', 'Ko-fi', 'Freiwillige Unterstützung über ko-fi.com (öffnet eine externe Seite in einem neuen Tab). Zum Spielen brauchst du es nicht.']
     ] },
     ro: { btn: 'CUM SE JOACĂ', title: 'CUM SE JOACĂ', close: 'OK', steps: [
       ['🎰', 'Miză și SPIN', 'Cu − și + (sau 50% = jumătate din sold) alegi miza, maximum tot soldul. La un sold foarte mare, nivelul WILD limitează miza. Apoi SPIN. AUTO se învârte singur.'],
@@ -16,6 +21,11 @@
       ['🃏', 'WILD BONUS', 'Câmpurile WILD te ajută să completezi liniile. Cu WILD BONUS cumperi permanent un nivel WILD mai mare (0–50): mai multe WILD la fiecare spin. Prețul e pe buton.'],
       ['🏦', 'BANK', 'Butonul BANK mută bani din sold în bancă. La cumpărarea WILD se folosește întâi banca, apoi soldul.'],
       ['📊', 'Clasament', 'Locul = întâi LVL WILD, apoi banii tăi (sold + bancă). Dificultate 1–3: 1 e mai ușor, 3 mai greu.']
+,
+      ['🎫', 'ID / KONTO', 'Aici îți creezi un cont sau te loghezi (ID sau nume + parolă). Cu cont, progresul se salvează și apari în clasament; tot aici îți schimbi numele și parola. Fără cont joci ca GAST (invitat).'],
+      ['🌐', 'Limba', 'Steagul schimbă limba: Deutsch, Română sau English. Alegerea ta se ține minte pe acest dispozitiv.'],
+      ['🔓', 'Blochează pagina', 'Lacătul blochează derularea paginii, ca să nu-ți alunece în timp ce joci. Apasă din nou ca să o deblochezi. Radio și KONTO se pot derula în continuare.'],
+      ['☕', 'Ko-fi', 'Sprijin voluntar prin ko-fi.com (se deschide un site extern, într-o filă nouă). Nu ai nevoie de el ca să joci.']
     ] },
     en: { btn: 'HOW TO PLAY', title: 'HOW TO PLAY', close: 'OK', steps: [
       ['🎰', 'Bet & SPIN', 'Use − and + (or 50% = half your balance) to pick your bet, at most your whole balance. With a very high balance your WILD level caps the bet. Then SPIN. AUTO spins by itself.'],
@@ -24,6 +34,11 @@
       ['🃏', 'WILD BONUS', 'WILD cells help you fill lines. WILD BONUS buys a permanently higher WILD level (0–50): more WILDs per spin. The price is on the button.'],
       ['🏦', 'BANK', 'The BANK button moves money from your balance into your bank. Buying WILD uses the bank first, then the balance.'],
       ['📊', 'Leaderboard', 'Rank = your WILD LVL first, then your money (balance + bank). Difficulty 1–3: 1 is easier, 3 is harder.']
+,
+      ['🎫', 'ID / ACCOUNT', 'Create an account or log in here (ID or name + password). With an account your progress is saved and you appear in the leaderboard; you also change your name and password here. Without one you play as a GUEST.'],
+      ['🌐', 'Language', 'The flag switches the language: Deutsch, Română or English. Your choice is remembered on this device.'],
+      ['🔓', 'Lock the page', 'The padlock locks page scrolling so it does not slide while you play. Tap again to unlock. Radio and ACCOUNT still scroll.'],
+      ['☕', 'Ko-fi', 'Voluntary support through ko-fi.com (opens an external site in a new tab). You do not need it to play.']
     ] }
   };
   var css = 'html body .topbar .brand-cluster .brand{position:relative}' +
